@@ -1,4 +1,14 @@
 .env
+.env.test
+.env.prod
 /memories
 /__pycache__
 /test_folder
+/saved_prompt
+/.vscode
+/.conda
+service-account.json
+*/data
+*/__pycache__
+
+/logs

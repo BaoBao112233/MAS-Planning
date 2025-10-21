@@ -6,13 +6,15 @@ authors = ["Your Name <youremail@example.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
+psycopg2-binary = "^2.9.10"
 fastapi = "^0.112.0"
 uvicorn = "^0.29.0"
 pydantic-settings = "^2.7.1"
 apscheduler = "^3.11.0"
-langchain-openai = "^0.3.0"
+langchain-google-vertexai = "^2.1.2"
+google-cloud-aiplatform = "^1.38.1"
 langchain = "^0.3.14"
-langchain-core = "^0.3.29"
+langchain-core = "^0.3.76"
 langgraph = "^0.2.62"
 langchain-community = "^0.3.14"
 APScheduler = "^3.11.0"
@@ -23,6 +25,9 @@ mem0ai = "^0.1.93"
 timeout-decorator = "^0.5.0"
 fake_useragent = "^1.5.1"
 python-dotenv = "^1.0.0"
+redis = "^6.4.0"
+termcolor = "^2.3.0"
+
 
 
 [build-system]

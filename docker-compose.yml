@@ -1,0 +1,150 @@
+# CRM-Oxii-Chatbot Complete Docker Compose Configuration
+# This file provides comprehensive deployment options for development and production
+version: '3.8'
+
+services:
+  # Main CRM Chatbot Application
+  crm-oxii-chatbot:
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile}
+    container_name: ${CONTAINER_NAME:-crm-oxii-chatbot}
+    restart: unless-stopped
+
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+
+    environment:
+      # Application settings
+      - API_VERSION=v1
+      - APP_NAME=CRM-Oxii-Chatbot
+      - APP_DESC=CRM Chatbot powered by Vertex AI
+      - APP_PORT=8000
+      # Python environment
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      # Vertex AI settings
+      - MODEL_NAME=${MODEL_NAME:-gemini-1.5-flash}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      # Chatbot settings (required)
+      - CHATBOTS_URL=${CHATBOTS_URL:-http://localhost:8000}
+      - CHATBOTS_INFO_URL=${CHATBOTS_INFO_URL:-http://localhost:8000/info}
+      # CRM settings
+      - CRM_API_URL=${CRM_API_URL:-}
+      - CRM_AUTH_TOKEN=${CRM_AUTH_TOKEN:-}
+      # Memory settings
+      - MEMORY_API_URL=${MEMORY_API_URL:-}
+      - MEMORY_AUTH_TOKEN=${MEMORY_AUTH_TOKEN:-}
+      # Postgres settings
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-crm_oxii_chatbot}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      # Redis settings
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=${REDIS_DB:-0}
+      - TTL_SECONDS=${TTL_SECONDS:-3600}
+      # Debug settings
+      - MAX_TURNS=${MAX_TURNS:-}
+      - MAX_MSG=${MAX_MSG:-}
+      - LIMIT_MINUTES=${LIMIT_MINUTES:-}
+      - DEBUG_MODE=${DEBUG_MODE:-false}
+
+    volumes:
+      # For development hot-reload, mount source code (comment out for production)
+      - ./:/app
+      # Override persistent directories to maintain data
+      - ./saved_prompt:/app/saved_prompt
+      - ./memories:/app/memories
+      - ./service-account.json:/app/service-account.json:ro
+      - ${LOG_VOLUME:-./logs}:/app/logs
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - crm-network
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-5}"
+
+    # Resource limits (adjust based on your server capacity)
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT:-2.0}'
+          memory: ${MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: '${CPU_RESERVATION:-1.0}'
+          memory: ${MEMORY_RESERVATION:-1G}
+
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache_ai
+    restart: unless-stopped
+
+    ports:
+      - "8900:6379"
+
+    volumes:
+      - ./redis/data:/data
+
+    command: ["redis-server", "--appendonly", "yes"]
+
+    networks:
+      - crm-network
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Postgres Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: crm-postgres
+    restart: unless-stopped
+
+    ports:
+      - "8901:5432"
+
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-crm_oxii_chatbot}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+
+    networks:
+      - crm-network
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# Network configuration
+networks:
+  crm-network:
+    driver: bridge
+
+# Volumes for persistent storage
+volumes:
+  crm-logs:
+    driver: local

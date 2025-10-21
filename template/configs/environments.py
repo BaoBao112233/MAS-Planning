@@ -10,10 +10,40 @@ def get_env_filename():
 
 
 class EnvironmentSettings(BaseSettings):
+    # Application settings
     API_VERSION: str
     APP_NAME: str
-    OPENAI_API_KEY: str
-    DEBUG_MODE: bool
+    APP_DESC: str
+    APP_PORT: int
+    # Vertex AI settings
+    MODEL_NAME: str = "gemini-2.5-pro"
+    GOOGLE_CLOUD_PROJECT: str
+    GOOGLE_CLOUD_LOCATION: str = "us-east1"
+    GOOGLE_APPLICATION_CREDENTIALS: str = "service-account.json"
+    # Chatbot settings
+    CHATBOTS_URL: str
+    CHATBOTS_INFO_URL: str
+    # CRM settings
+    CRM_API_URL: str
+    CRM_AUTH_TOKEN: str 
+    # Memory settings
+    MEMORY_API_URL: str
+    MEMORY_AUTH_TOKEN: str
+    # Database settings
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
+    POSTGRES_DB: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_DB: int
+    TTL_SECONDS: int = 3600
+    # Debug settings
+    MAX_TURNS: int = 20
+    LIMIT_MINUTES: int = 10
+    MAX_MSG: int = 12
+    DEBUG_MODE: bool = False
 
     model_config = SettingsConfigDict(env_file=get_env_filename(), env_file_encoding="utf-8")
 
