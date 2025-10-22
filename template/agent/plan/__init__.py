@@ -6,9 +6,12 @@ from template.message.converter import convert_messages_list
 from template.agent.plan.utils import (
     extract_llm_response, 
     read_markdown_file,
+    extract_priority_plans
 )
 from template.agent.plan.prompts import PLAN_PROMPTS, UPDATE_PLAN_PROMPTS
 from template.agent.meta import MetaAgent
+from template.agent.tool import ToolAgent
+from template.agent.api_client import APIClient
 from template.configs.environments import env
 
 from langchain_google_vertexai import ChatVertexAI
@@ -21,7 +24,11 @@ import asyncio
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',  # format thời gian
+)
 logger = logging.getLogger(__name__)
 
 class PlanAgent(BaseAgent):
@@ -49,7 +56,9 @@ class PlanAgent(BaseAgent):
 
         self.max_iteration = max_iteration
         self.verbose = verbose
-        self.api_client = None  # Placeholder for API client
+        self.api_client = APIClient()  # Initialize API client
+        self.meta_agent = None  # Will be initialized when needed
+        self.tool_agent = None  # Will be initialized when needed
         
         # Initialize graph
         self.graph = self.create_graph()
@@ -77,6 +86,47 @@ class PlanAgent(BaseAgent):
         }) as client:
             tools = list(client.get_tools())
             return tools
+    
+    def init_sub_agents(self):
+        """Initialize MetaAgent and ToolAgent when needed"""
+        if self.meta_agent is None:
+            self.meta_agent = MetaAgent(
+                model=self.model,
+                temperature=self.temperature,
+                verbose=self.verbose
+            )
+        
+        if self.tool_agent is None:
+            self.tool_agent = ToolAgent(
+                model=self.model,
+                temperature=self.temperature,
+                verbose=self.verbose
+            )
+            # Initialize ToolAgent async components
+            try:
+                import asyncio
+                import threading
+                
+                def run_async_init():
+                    # Create new event loop in separate thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(self.tool_agent.init_async())
+                    finally:
+                        loop.close()
+                
+                # Run in separate thread to avoid event loop conflict
+                thread = threading.Thread(target=run_async_init)
+                thread.start()
+                thread.join(timeout=10)  # Wait max 10 seconds
+                
+                if thread.is_alive():
+                    logger.warning("⚠️ ToolAgent async init timeout")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Could not init ToolAgent async: {e}")
+                logger.info("🧪 ToolAgent will use fallback mode")
 
     def router(self, state: PlanState):
         # Check if this is a plan selection
@@ -370,7 +420,7 @@ class PlanAgent(BaseAgent):
         return {**state,'output':output}
 
     def execute_selected_plan(self, state: PlanState):
-        """Execute the selected plan and upload to API"""
+        """Execute the selected plan with full MetaAgent + ToolAgent workflow"""
         selected_plan_id = state.get('selected_plan_id')
         plan_options = state.get('plan_options', {})
         
@@ -380,58 +430,168 @@ class PlanAgent(BaseAgent):
         if not plan_options:
             return {**state, 'output': 'No plan options available. Please create a new plan first.'}
         
-        # Use cached plan options from state
-        
         # Select the plan
         if selected_plan_id == 1:
             selected_plan = plan_options['security_plan']
-            plan_type = 'priority_security'
-            plan_name = 'Security Priority Plan'
+            plan_type = 'Security Priority Plan'
         elif selected_plan_id == 2:
             selected_plan = plan_options['convenience_plan']
-            plan_type = 'priority_convenience'
-            plan_name = 'Convenience Priority Plan'
+            plan_type = 'Convenience Priority Plan'
         elif selected_plan_id == 3:
             selected_plan = plan_options['energy_plan']
-            plan_type = 'priority_energy'
-            plan_name = 'Energy Efficiency Priority Plan'
+            plan_type = 'Energy Efficiency Priority Plan'
         else:
             return {**state, 'output': 'Invalid plan selection'}
         
         if self.verbose:
-            print(colored(f'\n✅ Selected Plan: {plan_name}', color='green', attrs=['bold']))
-            print(colored('📋 Tasks:', color='cyan', attrs=['bold']))
+            logger.info(f'✅ Selected Plan: {plan_type}')
+            logger.info('📋 Tasks:')
             for i, task in enumerate(selected_plan, 1):
-                print(colored(f'   {i}. {task}', color='white'))
+                logger.info(f'   {i}. {task}')
         
-        # Upload plan to API (placeholder)
+        # Step 1: Upload plan to API
         if self.api_client:
-            api_data = {
-                "input": state.get('input'),
-                "plan_type": plan_type,
-                "plan_name": plan_name,
+            plan_data = {
+                "input": state.get('input', ''),
+                "plan_type": plan_type.lower().replace(' ', '_'),
                 "current_plan": selected_plan,
-                "pending_tasks": selected_plan.copy(),
-                "completed_tasks": [],
-                "current_task": selected_plan[0] if selected_plan else "",
-                "status": "plan_selected_ready_to_execute",
-                "timestamp": time.time(),
-                "selected_plan_id": selected_plan_id
+                "status": "created"
             }
+            
             try:
-                # self.api_client.upload_plan(api_data)
-                logger.info(f"📤 Plan uploaded to API: {plan_name}")
+                api_result = self.api_client.create_plan(plan_data)
+                if api_result:
+                    logger.info(f"📤 Plan uploaded to API successfully")
+                    # Update plan status to execution started
+                    self.api_client.update_plan_status("in_progress")
+                else:
+                    logger.warning("⚠️ Failed to upload plan to API, continuing with execution")
             except Exception as e:
-                logger.error(f"❌ Failed to upload plan to API: {str(e)}")
+                logger.error(f"❌ API upload error: {str(e)}, continuing with execution")
         
-        # Return execution result
-        output = f"✅ **{plan_name}** has been selected and uploaded to API for execution.\n\n"
-        output += "📋 **Plan Tasks:**\n"
-        for i, task in enumerate(selected_plan, 1):
-            output += f"{i}. {task}\n"
-        output += f"\n🚀 Plan execution will begin shortly..."
+        # Step 2: Initialize sub-agents
+        self.init_sub_agents()
         
-        return {**state, 'plan': selected_plan, 'output': output}
+        # Step 3: Execute plan through MetaAgent + ToolAgent workflow
+        execution_results = []
+        completed_tasks = []
+        failed_tasks = []
+        
+        try:
+            for i, task in enumerate(selected_plan, 1):
+                logger.info(f"\n🚀 Executing Task {i}/{len(selected_plan)}: {task}")
+                
+                # Update task status to in_progress
+                if self.api_client:
+                    self.api_client.update_task_status(task, "in_progress")
+                
+                # Step 3a: MetaAgent analyzes the task
+                meta_input = {
+                    "input": task,
+                    "context": f"This is task {i} of {len(selected_plan)} from {plan_type}",
+                    "previous_results": execution_results[-3:] if execution_results else []  # Last 3 results for context
+                }
+                
+                try:
+                    meta_result = self.meta_agent.invoke(meta_input)
+                    logger.info(f"🧠 MetaAgent analysis: {meta_result.get('output', 'No output')[:100]}...")
+                    
+                    # Step 3b: ToolAgent executes the specific action
+                    tool_result = self.tool_agent.invoke(task)
+                    
+                    if tool_result.get('tool_agent_result', False):
+                        execution_results.append({
+                            "task_number": i,
+                            "task": task,
+                            "meta_analysis": meta_result.get('output', ''),
+                            "tool_execution": tool_result.get('output', ''),
+                            "status": "completed"
+                        })
+                        completed_tasks.append(task)
+                        
+                        # Update task status to completed
+                        if self.api_client:
+                            self.api_client.update_task_status(
+                                task, 
+                                "completed", 
+                                tool_result.get('output', '')
+                            )
+                        
+                        logger.info(f"✅ Task {i} completed successfully")
+                    else:
+                        error_msg = tool_result.get('error', 'Unknown tool execution error')
+                        execution_results.append({
+                            "task_number": i,
+                            "task": task,
+                            "meta_analysis": meta_result.get('output', ''),
+                            "tool_execution": error_msg,
+                            "status": "failed"
+                        })
+                        failed_tasks.append(task)
+                        
+                        # Update task status to failed
+                        if self.api_client:
+                            self.api_client.update_task_status(task, "failed", error_msg)
+                        
+                        logger.error(f"❌ Task {i} failed: {error_msg}")
+                        
+                except Exception as e:
+                    error_msg = f"MetaAgent execution error: {str(e)}"
+                    execution_results.append({
+                        "task_number": i,
+                        "task": task,
+                        "meta_analysis": "Failed to analyze",
+                        "tool_execution": error_msg,
+                        "status": "failed"
+                    })
+                    failed_tasks.append(task)
+                    
+                    if self.api_client:
+                        self.api_client.update_task_status(task, "failed", error_msg)
+                    
+                    logger.error(f"❌ Task {i} failed with exception: {str(e)}")
+        
+        except Exception as e:
+            logger.error(f"❌ Critical error during plan execution: {str(e)}")
+        
+        # Step 4: Finalize and report results
+        total_tasks = len(selected_plan)
+        completed_count = len(completed_tasks)
+        failed_count = len(failed_tasks)
+        success_rate = (completed_count / total_tasks * 100) if total_tasks > 0 else 0
+        
+        # Update final plan status
+        if self.api_client:
+            final_status = "completed" if failed_count == 0 else "partially_completed"
+            final_summary = f"Plan execution completed. {completed_count}/{total_tasks} tasks successful ({success_rate:.1f}%)"
+            self.api_client.update_plan_status(final_status, final_summary)
+        
+        # Generate comprehensive output
+        output = f"🎯 **{plan_type} Execution Complete**\n\n"
+        output += f"� **Summary:**\n"
+        output += f"• Total Tasks: {total_tasks}\n"
+        output += f"• Completed: {completed_count}\n" 
+        output += f"• Failed: {failed_count}\n"
+        output += f"• Success Rate: {success_rate:.1f}%\n\n"
+        
+        if completed_tasks:
+            output += f"✅ **Completed Tasks:**\n"
+            for task in completed_tasks:
+                output += f"• {task}\n"
+            output += "\n"
+        
+        if failed_tasks:
+            output += f"❌ **Failed Tasks:**\n"
+            for task in failed_tasks:
+                output += f"• {task}\n"
+            output += "\n"
+        
+        output += f"📋 **Detailed Results:**\n"
+        for result in execution_results:
+            status_icon = "✅" if result["status"] == "completed" else "❌"
+            output += f"{status_icon} Task {result['task_number']}: {result['task'][:50]}...\n"
+        
+        return {**state, 'plan': selected_plan, 'output': output, 'execution_results': execution_results}
 
     def plan_controller(self,state:UpdateState):
         if state.get('pending'):

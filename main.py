@@ -7,7 +7,11 @@ from template.configs.environments import env
 from template.router.v1.ai import AiRouter, Prompt_Router
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',  # format thời gian
+)
 logger = logging.getLogger(__name__)
 
 

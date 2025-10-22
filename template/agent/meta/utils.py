@@ -3,9 +3,35 @@ import xml.etree.ElementTree as ET
 def extract_from_xml(xml_string):
     # Parse the XML string
     try:
-        root = ET.fromstring(xml_string)
+        # Clean up the XML string
+        xml_string = xml_string.strip()
+        
+        # Try to find XML content in the response
+        if '<' not in xml_string:
+            return {
+                "error": "No XML content found",
+                "raw_content": xml_string[:100] + "..." if len(xml_string) > 100 else xml_string
+            }
+        
+        # Extract XML part if wrapped in other text
+        start_idx = xml_string.find('<')
+        end_idx = xml_string.rfind('>') + 1
+        if start_idx >= 0 and end_idx > start_idx:
+            xml_content = xml_string[start_idx:end_idx]
+        else:
+            xml_content = xml_string
+        
+        root = ET.fromstring(xml_content)
     except ET.ParseError as e:
-        return {"error": str(e)}
+        return {
+            "error": f"XML parse error: {str(e)}",
+            "raw_content": xml_string[:200] + "..." if len(xml_string) > 200 else xml_string
+        }
+    except Exception as e:
+        return {
+            "error": f"Unexpected error: {str(e)}",
+            "raw_content": xml_string[:200] + "..." if len(xml_string) > 200 else xml_string
+        }
     
     # Initialize the result dictionary
     result = {

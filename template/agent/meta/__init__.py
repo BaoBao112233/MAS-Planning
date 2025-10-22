@@ -10,6 +10,14 @@ from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import StateGraph,END
 
 from termcolor import colored
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',  # format thời gian
+)
+logger = logging.getLogger(__name__)
 
 class MetaAgent(BaseAgent):
     def __init__(self, 
@@ -49,6 +57,7 @@ class MetaAgent(BaseAgent):
         llm_response=self.llm.invoke(messages)
         # print(llm_response.content)
         agent_data=extract_from_xml(llm_response.content)
+        logger.info(colored(f'Meta Agent extracted data: {agent_data}', 'blue'))
         name=agent_data.get('Agent Name')
         description=agent_data.get('Agent Description')
         tasks=agent_data.get('Tasks')
@@ -97,16 +106,36 @@ class MetaAgent(BaseAgent):
 
         return graph.compile(debug=False)
 
-    def invoke(self, input: str)->str:    
+    def invoke(self, input_data)->dict:    
         if self.verbose:
             print(f'Entering '+colored(self.name,'black','on_white'))  
+        
+        # Handle different input formats
+        if isinstance(input_data, dict):
+            # Convert dict to formatted string for MetaAgent
+            task = input_data.get('task', '')
+            context = input_data.get('context', '')
+            previous_results = input_data.get('previous_results', [])
+            
+            input_text = f"Task: {task}\nContext: {context}"
+            if previous_results:
+                input_text += f"\nPrevious Results: {previous_results}"
+        else:
+            input_text = str(input_data)
+            
         state={
-            'input':input,
-            'messages':[SystemMessage(self.system_prompt),HumanMessage(f'User Query: {input}')],
+            'input':input_text,
+            'messages':[SystemMessage(self.system_prompt),HumanMessage(f'User Query: {input_text}')],
             'output':'',
         }
         graph_response=self.graph.invoke(state)
-        return graph_response['output']
+        
+        # Return dict format for compatibility with PlanAgent
+        return {
+            'output': graph_response.get('output', ''),
+            'agent_data': graph_response.get('agent_data', {}),
+            'success': True
+        }
 
     def stream(self, input: str):
         pass
