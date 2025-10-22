@@ -1,15 +1,18 @@
-from typing import TypedDict,Annotated
+from typing import TypedDict, Annotated, Optional
 from template.message.message import BaseMessage
 from operator import add
 
 def subtract(l1: list[str], l2: list[str]) -> list[str]:
     return list(set(l1) - set(l2))
 
-class PlanState(TypedDict):
+class PlanState(TypedDict, total=False):
     input: str
     plan_type: str
     plan_status: str
     plan: list[str]
+    plan_options: dict  # Store plan options for user selection
+    needs_user_selection: bool  # Flag to indicate if waiting for user selection
+    selected_plan_id: Optional[int]  # User's selected plan ID
     output: str
 
 class UpdateState(TypedDict):

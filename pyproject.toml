@@ -27,6 +27,7 @@ fake_useragent = "^1.5.1"
 python-dotenv = "^1.0.0"
 redis = "^6.4.0"
 termcolor = "^2.3.0"
+langchain-mcp-adapters="^0.0.9"
 
 
 

@@ -1,25 +1,31 @@
-from typing import Optional
+from typing import Optional, List
 from typing import Any
 from pydantic import BaseModel, Field
 
-class ResponseFormatter(BaseModel):
-    message: str = Field(..., description="The response message from the chatbot")
-    code: str = Field("General", description="The category code of the response, e.g., CSKH, SAL, General")
-    notifi: str = Field("", description="Notification message related to the response")
-    voc_id: str = Field("", description="VOC identifier, if applicable")
-    status: str = Field("error", description="Status of the response, e.g., success or error")
+class PlanOption(BaseModel):
+    id: int = Field(..., description="Plan option ID (1, 2, or 3)")
+    name: str = Field(..., description="Plan name")
+    focus: str = Field(..., description="Plan focus description")
+    tasks: List[str] = Field(..., description="List of tasks in this plan")
+
+class PlanOptionsResponse(BaseModel):
+    type: str = Field("plan_options", description="Response type")
+    message: str = Field(..., description="Instructions for user")
+    options: List[PlanOption] = Field(..., description="Available plan options")
+    sessionId: str = Field(..., description="Session ID")
+
+class PlanSelectionRequest(BaseModel):
+    sessionId: str = Field(..., description="Session ID")
+    selectedPlanId: int = Field(..., description="Selected plan ID (1, 2, or 3)")
 
 class ChatRequest(BaseModel):
     conversationId: str
     sessionId: str
     message: str
-    channelId: str
-    socialNetworkId: str
-    pageName: Optional[str] = None
 
 class ChatResponse(BaseModel):
     sessionId: str
-    response: ResponseFormatter
+    response: str
     error_status: str = "success"
 
 # Request models

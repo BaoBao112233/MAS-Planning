@@ -20,26 +20,27 @@ class EnvironmentSettings(BaseSettings):
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_CLOUD_LOCATION: str = "us-east1"
     GOOGLE_APPLICATION_CREDENTIALS: str = "service-account.json"
-    # Chatbot settings
-    CHATBOTS_URL: str
-    CHATBOTS_INFO_URL: str
-    # CRM settings
-    CRM_API_URL: str
-    CRM_AUTH_TOKEN: str 
-    # Memory settings
-    MEMORY_API_URL: str
-    MEMORY_AUTH_TOKEN: str
-    # Database settings
-    POSTGRES_HOST: str
-    POSTGRES_PORT: int
-    POSTGRES_DB: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
+    # # Chatbot settings
+    # CHATBOTS_URL: str
+    # CHATBOTS_INFO_URL: str
+    # # CRM settings
+    # CRM_API_URL: str
+    # CRM_AUTH_TOKEN: str 
+    # # Memory settings
+    # MEMORY_API_URL: str
+    # MEMORY_AUTH_TOKEN: str
+    # # Database settings
+    # POSTGRES_HOST: str
+    # POSTGRES_PORT: int
+    # POSTGRES_DB: str
+    # POSTGRES_USER: str
+    # POSTGRES_PASSWORD: str
     REDIS_HOST: str
     REDIS_PORT: int
     REDIS_DB: int
     TTL_SECONDS: int = 3600
     # Debug settings
+    MCP_SERVER_URL: str
     MAX_TURNS: int = 20
     LIMIT_MINUTES: int = 10
     MAX_MSG: int = 12
@@ -50,6 +51,9 @@ class EnvironmentSettings(BaseSettings):
 
 @lru_cache
 def get_environment_variables():
-    return EnvironmentSettings()
+    env_settings = EnvironmentSettings()
+    # Set the Google Application Credentials environment variable
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = env_settings.GOOGLE_APPLICATION_CREDENTIALS
+    return env_settings
 
 env = get_environment_variables()

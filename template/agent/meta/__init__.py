@@ -2,6 +2,7 @@ from template.agent import BaseAgent
 from template.configs.environments import env
 from template.agent.meta.state import AgentState
 from template.message.message import HumanMessage, SystemMessage
+from template.message.converter import convert_messages_list
 from template.agent.meta.utils import extract_from_xml
 from template.agent.meta.prompt import META_PROMPT
 
@@ -43,7 +44,9 @@ class MetaAgent(BaseAgent):
         self.graph = self.create_graph()
     
     def meta_expert(self,state:AgentState):
-        llm_response=self.llm.invoke(state['messages'])
+        # Convert custom messages to LangChain messages before passing to LLM
+        messages = convert_messages_list(state['messages'])
+        llm_response=self.llm.invoke(messages)
         # print(llm_response.content)
         agent_data=extract_from_xml(llm_response.content)
         name=agent_data.get('Agent Name')
@@ -72,12 +75,10 @@ class MetaAgent(BaseAgent):
         if self.max_iteration>self.iteration:
             self.iteration+=1
             agent_data=state.get('agent_data')
-            if agent_data.get('Answer'):
+            if agent_data and agent_data.get('Answer'):
                 return 'Answer'
-            # elif agent_data.get('Tool'):
-            #     return 'React'
-            # else:
-            #     return 'COT'
+            else:
+                return 'Answer'  # Default to Answer if no agent_data or no Answer
         else:
             return 'Answer'
 

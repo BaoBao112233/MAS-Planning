@@ -1,3 +1,4 @@
+from typing import Union
 import logging
 import json
 import os
@@ -11,8 +12,10 @@ from template.schemas.model import (
     ChatRequest, 
     ChatResponse, 
     ChatRequestAPI,
-    ResponseFormatter,
-    APIResponse
+    APIResponse,
+    PlanOptionsResponse,
+    PlanOption,
+    PlanSelectionRequest
 )
 from template.agent.prompts import CLASSIFICATION_PROMPT, DEFAULT_CLASSIFICATION_PROMPT, SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
 
@@ -45,21 +48,94 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             temperature=0.2,
             model=env.MODEL_NAME
         )
+
+        await agent.init_async()
+
         # Process the request
         chat_request = request.message
-        response = agent.invoke(chat_request)
         
-        return response
+        # Check if this is a plan selection (user replied with 1, 2, or 3 or Plan 1, etc.)
+        if chat_request.strip() in ['1', '2', '3'] or any(x in chat_request.lower() for x in ['plan 1', 'plan 2', 'plan 3']):
+            if chat_request.strip() in ['1', '2', '3']:
+                selected_plan_id = int(chat_request.strip())
+            else:
+                # Extract plan number from "plan 1", "plan 2", etc.
+                if 'plan 1' in chat_request.lower():
+                    selected_plan_id = 1
+                elif 'plan 2' in chat_request.lower():
+                    selected_plan_id = 2
+                elif 'plan 3' in chat_request.lower():
+                    selected_plan_id = 3
+                else:
+                    selected_plan_id = 1  # default
+            
+            response = agent.invoke("Execute the selected plan", selected_plan_id=selected_plan_id)
+            
+            return ChatResponse(
+                sessionId=request.sessionId,
+                response=response.get('output', 'Plan executed successfully'),
+                error_status="success"
+            )
+        
+        # Normal plan creation request
+        response = agent.invoke(chat_request)
+
+        logger.info(f'📝 Response: {response}')
+        
+        # Check if we need to return plan options
+        if response.get('needs_user_selection', False):
+            plan_options = response.get('plan_options', {})
+            
+            # Format plan options as a nicely formatted message
+            security_plan = plan_options.get('security_plan', [])
+            convenience_plan = plan_options.get('convenience_plan', [])
+            energy_plan = plan_options.get('energy_plan', [])
+            
+            formatted_message = "Please select your preferred plan:\n\n"
+            
+            # Plan A - Security Priority Plan
+            formatted_message += "1. **Plan A: Security Priority Plan**\n\n"
+            formatted_message += "    Goal: Maximum safety and security\n\n"
+            formatted_message += "    Tasks:\n"
+            for i, task in enumerate(security_plan, 1):
+                formatted_message += f"    - {task}\n"
+            formatted_message += "\n"
+            
+            # Plan B - Convenience Priority Plan  
+            formatted_message += "2. **Plan B: Convenience Priority Plan**\n\n"
+            formatted_message += "    Goal: User experience and ease of use\n\n"
+            formatted_message += "    Tasks:\n"
+            for i, task in enumerate(convenience_plan, 1):
+                formatted_message += f"    - {task}\n"
+            formatted_message += "\n"
+            
+            # Plan C - Energy Efficiency Priority Plan
+            formatted_message += "3. **Plan C: Energy Efficiency Priority Plan**\n\n"
+            formatted_message += "    Goal: Minimal resource consumption\n\n"
+            formatted_message += "    Tasks:\n"
+            for i, task in enumerate(energy_plan, 1):
+                formatted_message += f"    - {task}\n"
+            
+            formatted_message += "\nPlease reply with the number (1, 2, or 3) of your preferred plan."
+            
+            return ChatResponse(
+                sessionId=request.sessionId,
+                response=formatted_message,
+                error_status="success"
+            )
+        
+        # Normal response
+        return ChatResponse(
+            sessionId=request.sessionId,
+            response=response.get('output', 'Plan created successfully'),
+            error_status="success"
+        )
+        
     except Exception as e:
         logger.error(f"Error processing chat request: {str(e)}", exc_info=True)
         return ChatResponse(
             sessionId=request.sessionId,
-            response=ResponseFormatter(
-                message="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
-                code="General",
-                notifi="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
-                voc_id="",
-                status="error"
-            ),
+            response="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
             error_status="error"
         )
+
