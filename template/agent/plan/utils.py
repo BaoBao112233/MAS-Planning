@@ -1,4 +1,8 @@
 import re
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def extract_plan(response):
     extracted_data = {}
@@ -145,6 +149,7 @@ def extract_priority_plans(response):
                     tasks = re.findall(r'(?:^\d+\.\s*|^[-•\*]\s*)(.*)', plan_text, re.MULTILINE)
                     extracted_data[plan_key] = [task.strip() for task in tasks if task.strip()]
     
+    logger.info(f"Extracted Plans: {extracted_data}")
     return extracted_data
 
 def read_markdown_file(file_path: str) -> str:

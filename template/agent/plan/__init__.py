@@ -372,31 +372,15 @@ class PlanAgent(BaseAgent):
     def execute_selected_plan(self, state: PlanState):
         """Execute the selected plan and upload to API"""
         selected_plan_id = state.get('selected_plan_id')
+        plan_options = state.get('plan_options', {})
         
         if not selected_plan_id:
             return {**state, 'output': 'No plan selected'}
         
-        # Get dummy plan options (in real app, these would be cached)
-        plan_options = {
-            'security_plan': [
-                'Set up security cameras in key areas', 
-                'Install motion sensors and alarm system',
-                'Enable automated security lighting',
-                'Configure door and window sensors'
-            ],
-            'convenience_plan': [
-                'Automate lighting based on presence', 
-                'Set up voice control for common tasks', 
-                'Create morning and evening routines',
-                'Install smart switches for easy control'
-            ],
-            'energy_plan': [
-                'Install smart thermostat for climate control', 
-                'Use energy-efficient LED bulbs throughout', 
-                'Set up automated power management',
-                'Configure energy monitoring and alerts'
-            ]
-        }
+        if not plan_options:
+            return {**state, 'output': 'No plan options available. Please create a new plan first.'}
+        
+        # Use cached plan options from state
         
         # Select the plan
         if selected_plan_id == 1:
@@ -497,7 +481,7 @@ class PlanAgent(BaseAgent):
 
         return graph.compile(debug=False)
 
-    def invoke(self,input:str, selected_plan_id: int = None):
+    def invoke(self,input:str, selected_plan_id: int = None, plan_options: dict = None):
         # Lưu thời gian bắt đầu và input để sử dụng cho API
         self.start_time = time.time()
         self.current_input = input
@@ -509,7 +493,7 @@ class PlanAgent(BaseAgent):
             'plan_status':'',
             'route':'',
             'plan': [],
-            'plan_options': {},
+            'plan_options': plan_options or {},  # Use cached plan options if provided
             'needs_user_selection': False,
             'selected_plan_id': selected_plan_id,
             'output': ''

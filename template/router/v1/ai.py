@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from cachetools import TTLCache
 
 from template.agent.plan import PlanAgent
+
+# Session cache to store plan options for plan selection
+session_cache = TTLCache(maxsize=1000, ttl=3600)  # 1 hour TTL
 from template.configs.environments import env
 from template.schemas.model import (
     ChatRequest, 
@@ -69,7 +72,15 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
                 else:
                     selected_plan_id = 1  # default
             
-            response = agent.invoke("Execute the selected plan", selected_plan_id=selected_plan_id)
+            # Get cached plan options for this session
+            session_key = f"{request.sessionId}_{request.conversationId}"
+            cached_plans = session_cache.get(session_key)
+            
+            if cached_plans:
+                # Create request with plan selection context and cached plan options
+                response = agent.invoke(chat_request, selected_plan_id=selected_plan_id, plan_options=cached_plans)
+            else:
+                response = {"output": "❌ No previous plans found. Please create a new plan first."}
             
             return ChatResponse(
                 sessionId=request.sessionId,
@@ -85,6 +96,10 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         # Check if we need to return plan options
         if response.get('needs_user_selection', False):
             plan_options = response.get('plan_options', {})
+            
+            # Save plan options to cache for later selection
+            session_key = f"{request.sessionId}_{request.conversationId}"
+            session_cache[session_key] = plan_options
             
             # Format plan options as a nicely formatted message
             security_plan = plan_options.get('security_plan', [])
