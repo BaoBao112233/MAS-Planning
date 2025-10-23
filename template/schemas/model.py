@@ -32,11 +32,9 @@ class ChatResponse(BaseModel):
 class ChatRequestAPI(BaseModel):
     conversationId: str = Field(..., description="Unique identifier for the conversation")
     sessionId: str = Field(..., description="Unique identifier for the user session")
+    token: Optional[str] = Field("", description="Authentication token if required") 
     message: str = Field(..., description="User message to process")
-    channelId: str = Field(..., description="Unique identifier for the channel")
-    socialNetworkId: str = Field(..., description="Unique identifier for the social network")
-    pageName: Optional[str] = Field(None, description="Name of the page (if applicable)")
-
+    
 # Response models
 class APIResponse(BaseModel):
     response: str

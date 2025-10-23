@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, BackgroundTasks
 from cachetools import TTLCache
 
-from template.agent.plan import PlanAgent
+from template.agent.manager import ManagerAgent
 
 # Session cache to store plan options for plan selection
 session_cache = TTLCache(maxsize=1000, ttl=3600)  # 1 hour TTL
@@ -46,104 +46,44 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
     """Process a chat message and return a response"""
     try:
         # Lấy prompt từ file JSON nếu có chatId
-        logger.info(f'⚙️  sessionId: {request.sessionId} | channelId: {request.channelId} | socialNetworkId: {request.socialNetworkId} | message: {request.message} | pageName: {request.pageName}')
-        agent = PlanAgent(
+        logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
+        agent = ManagerAgent(
             temperature=0.2,
-            model=env.MODEL_NAME
+            model=env.MODEL_NAME,
+            verbose=True,
+            session_id=request.sessionId,  # Pass session_id for chat history
+            conversation_id=request.conversationId
         )
 
-        await agent.init_async()
+        # Check if this is a plan selection and retrieve cached plan options
+        session_key = f"{request.sessionId}_{request.conversationId}"   
+        cached_plans = session_cache.get(session_key)
+        
+        # Pass cached plans to the manager agent if available
+        context = {}
+        if cached_plans:
+            context['cached_plan_options'] = cached_plans
+        
+        input_data = {
+            "message": request.message,
+            "token": request.token
+        }
+        
+        # Manager Agent handles all routing internally
+        response = agent.invoke(input_data, context=context)
 
-        # Process the request
-        chat_request = request.message
-        
-        # Check if this is a plan selection (user replied with 1, 2, or 3 or Plan 1, etc.)
-        if chat_request.strip() in ['1', '2', '3'] or any(x in chat_request.lower() for x in ['plan 1', 'plan 2', 'plan 3']):
-            if chat_request.strip() in ['1', '2', '3']:
-                selected_plan_id = int(chat_request.strip())
-            else:
-                # Extract plan number from "plan 1", "plan 2", etc.
-                if 'plan 1' in chat_request.lower():
-                    selected_plan_id = 1
-                elif 'plan 2' in chat_request.lower():
-                    selected_plan_id = 2
-                elif 'plan 3' in chat_request.lower():
-                    selected_plan_id = 3
-                else:
-                    selected_plan_id = 1  # default
-            
-            # Get cached plan options for this session
-            session_key = f"{request.sessionId}_{request.conversationId}"
-            cached_plans = session_cache.get(session_key)
-            
-            if cached_plans:
-                # Create request with plan selection context and cached plan options
-                response = agent.invoke(chat_request, selected_plan_id=selected_plan_id, plan_options=cached_plans)
-            else:
-                response = {"output": "❌ No previous plans found. Please create a new plan first."}
-            
-            return ChatResponse(
-                sessionId=request.sessionId,
-                response=response.get('output', 'Plan executed successfully'),
-                error_status="success"
-            )
-        
-        # Normal plan creation request
-        response = agent.invoke(chat_request)
+        # Store plan options in cache if response contains them
+        if 'plan_options' in response:
+            session_cache[session_key] = response['plan_options']
+            logger.info(f"💾 Stored plan options for session {session_key}")
 
         logger.info(f'📝 Response: {response}')
         
-        # Check if we need to return plan options
-        if response.get('needs_user_selection', False):
-            plan_options = response.get('plan_options', {})
-            
-            # Save plan options to cache for later selection
-            session_key = f"{request.sessionId}_{request.conversationId}"
-            session_cache[session_key] = plan_options
-            
-            # Format plan options as a nicely formatted message
-            security_plan = plan_options.get('security_plan', [])
-            convenience_plan = plan_options.get('convenience_plan', [])
-            energy_plan = plan_options.get('energy_plan', [])
-            
-            formatted_message = "Please select your preferred plan:\n\n"
-            
-            # Plan A - Security Priority Plan
-            formatted_message += "1. **Plan A: Security Priority Plan**\n\n"
-            formatted_message += "    Goal: Maximum safety and security\n\n"
-            formatted_message += "    Tasks:\n"
-            for i, task in enumerate(security_plan, 1):
-                formatted_message += f"    - {task}\n"
-            formatted_message += "\n"
-            
-            # Plan B - Convenience Priority Plan  
-            formatted_message += "2. **Plan B: Convenience Priority Plan**\n\n"
-            formatted_message += "    Goal: User experience and ease of use\n\n"
-            formatted_message += "    Tasks:\n"
-            for i, task in enumerate(convenience_plan, 1):
-                formatted_message += f"    - {task}\n"
-            formatted_message += "\n"
-            
-            # Plan C - Energy Efficiency Priority Plan
-            formatted_message += "3. **Plan C: Energy Efficiency Priority Plan**\n\n"
-            formatted_message += "    Goal: Minimal resource consumption\n\n"
-            formatted_message += "    Tasks:\n"
-            for i, task in enumerate(energy_plan, 1):
-                formatted_message += f"    - {task}\n"
-            
-            formatted_message += "\nPlease reply with the number (1, 2, or 3) of your preferred plan."
-            
-            return ChatResponse(
-                sessionId=request.sessionId,
-                response=formatted_message,
-                error_status="success"
-            )
-        
-        # Normal response
+        # Manager Agent provides formatted response directly
         return ChatResponse(
             sessionId=request.sessionId,
-            response=response.get('output', 'Plan created successfully'),
-            error_status="success"
+            response=response.get('output', 'Request processed successfully'),
+            error_status="success" if response.get('success', True) else "error"
         )
         
     except Exception as e:
