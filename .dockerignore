@@ -1,9 +1,26 @@
-# Docker ignore file để loại bỏ các file không cần thiết khi build image
+# MAS-Planning Docker Ignore File
+# Files and directories to exclude from Docker build context
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+DEPLOYMENT.md
+*.md
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Distribution / packaging
+*.so
 .Python
 build/
 develop-eggs/
@@ -21,16 +38,49 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 pip-log.txt
 pip-delete-this-directory.txt
+.pytest_cache/
 
-# Unit test / coverage reports
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and data
+logs/
+*.log
+data/
+mcp_data/
+redis/
+
+# Docker files (exclude from build context)
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile.*
+.dockerignore
+
+# Deployment scripts
+deploy.sh
+.env.example
+
+# Testing
 htmlcov/
 .tox/
 .coverage
@@ -40,102 +90,17 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-.pytest_cache/
+test_*.py
+tests/
+*_test.py
 
-# Translations
-*.mo
-*.pot
+# Temporary files
+*.tmp
+*.temp
+.cache/
+node_modules/
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.env.*
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
+# Development tools
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Project specific
-node_modules/
-.git
-.gitignore
-README.md
-*.md
-logs/
-*.log
-
-# Docker
-Dockerfile
-docker-compose*.yml
-.dockerignore
-
-# Monitoring
-monitoring/
-
-# SSL
-ssl/
-
-# Redis data
-redis/

@@ -280,9 +280,11 @@ class PlanAgent(BaseAgent):
         
         if self.verbose:
             if pending:
-                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+                pending_tasks = "\n".join([f"{index+1}. {task}" for index,task in enumerate(pending)])
+                print(colored(f'Pending Tasks:\n{pending_tasks}',color='yellow',attrs=['bold']))
             if completed:
-                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+                completed_tasks = "\n".join([f"{index+1}. {task}" for index,task in enumerate(completed)])
+                print(colored(f'Completed Tasks:\n{completed_tasks}',color='blue',attrs=['bold']))
         
         # Khởi tạo tất cả tasks với status "pending" trên API
         if self.api_enabled and self.api_client:
@@ -305,7 +307,8 @@ class PlanAgent(BaseAgent):
             self.api_client.update_task_status(current, "in_progress")
         
         agent=MetaAgent(llm=self.llm,verbose=self.verbose)
-        task_response=agent.invoke(f'Information:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(responses)])}\nTask:\n{current}')
+        responses_text = "\n".join([f"{index+1}. {task}" for index,task in enumerate(responses)])
+        task_response=agent.invoke(f'Information:\n{responses_text}\nTask:\n{current}')
         
         if self.verbose:
             print(colored(f'Current Task:\n{current}',color='cyan',attrs=['bold']))
@@ -368,9 +371,11 @@ class PlanAgent(BaseAgent):
         
         if self.verbose:
             if pending:
-                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+                pending_tasks = "\n".join([f"{index+1}. {task}" for index,task in enumerate(pending)])
+                print(colored(f'Pending Tasks:\n{pending_tasks}',color='yellow',attrs=['bold']))
             if completed:
-                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+                completed_tasks = "\n".join([f"{index+1}. {task}" for index,task in enumerate(completed)])
+                print(colored(f'Completed Tasks:\n{completed_tasks}',color='blue',attrs=['bold']))
         
         # Update task statuses trên API
         if self.api_enabled and self.api_client:
@@ -681,7 +686,8 @@ class PlanAgent(BaseAgent):
             plan_type = 'priority_security'
         
         if self.verbose:
-            print(colored(f'\nSelected Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(selected_plan)])}',color='green',attrs=['bold']))
+            selected_plan_text = "\n".join([f"{index+1}. {task}" for index,task in enumerate(selected_plan)])
+            print(colored(f'\nSelected Plan:\n{selected_plan_text}',color='green',attrs=['bold']))
         
         return {**state, 'plan': selected_plan, 'needs_user_selection': False}
 

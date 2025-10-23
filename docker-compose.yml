@@ -1,78 +1,73 @@
-# CRM-Oxii-Chatbot Complete Docker Compose Configuration
-# This file provides comprehensive deployment options for development and production
-version: '3.8'
+# MAS-Planning Multi-Agent System Docker Compose Configuration
+# Complete deployment setup for development and production environments
 
 services:
-  # Main CRM Chatbot Application
-  crm-oxii-chatbot:
+  # Main MAS-Planning Application
+  mas-planning:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}
-    container_name: ${CONTAINER_NAME:-crm-oxii-chatbot}
+    container_name: ${CONTAINER_NAME:-mas-planning-app}
     restart: unless-stopped
 
     ports:
-      - "${HOST_PORT:-8000}:8000"
+      - "${HOST_PORT:-9000}:9000"
 
     environment:
       # Application settings
-      - API_VERSION=v1
-      - APP_NAME=CRM-Oxii-Chatbot
-      - APP_DESC=CRM Chatbot powered by Vertex AI
-      - APP_PORT=8000
+      - API_VERSION=${API_VERSION:-v1}
+      - APP_NAME=${APP_NAME:-MAS Planning System}
+      - APP_DESC=${APP_DESC:-Multi-Agent Smart Home Planning System}
+      - APP_PORT=9000
+      
       # Python environment
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      
       # Vertex AI settings
       - MODEL_NAME=${MODEL_NAME:-gemini-2.5-pro}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
-      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-east1}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-      # Chatbot settings (required)
-      - CHATBOTS_URL=${CHATBOTS_URL:-http://localhost:8000}
-      - CHATBOTS_INFO_URL=${CHATBOTS_INFO_URL:-http://localhost:8000/info}
-      # CRM settings
-      - CRM_API_URL=${CRM_API_URL:-}
-      - CRM_AUTH_TOKEN=${CRM_AUTH_TOKEN:-}
-      # Memory settings
-      - MEMORY_API_URL=${MEMORY_API_URL:-}
-      - MEMORY_AUTH_TOKEN=${MEMORY_AUTH_TOKEN:-}
-      # Postgres settings
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-crm_oxii_chatbot}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-      # Redis settings
+      
+      # Redis settings (for conversation history)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=${REDIS_DB:-0}
       - TTL_SECONDS=${TTL_SECONDS:-3600}
-      # Debug settings
-      - MAX_TURNS=${MAX_TURNS:-}
-      - MAX_MSG=${MAX_MSG:-}
-      - LIMIT_MINUTES=${LIMIT_MINUTES:-}
+      
+      # MCP Server settings
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://host.docker.internal:9031/sse}
+      - PLANNER_API_BASE_URL=${PLANNER_API_BASE_URL:-http://host.docker.internal:8000}
+      
+      # Multi-Agent System settings
+      - MAX_TURNS=${MAX_TURNS:-20}
+      - MAX_MSG=${MAX_MSG:-12}
+      - LIMIT_MINUTES=${LIMIT_MINUTES:-10}
       - DEBUG_MODE=${DEBUG_MODE:-false}
 
     volumes:
-      # For development hot-reload, mount source code (comment out for production)
+      # For development hot-reload (comment out for production)
       - ./:/app
-      # Override persistent directories to maintain data
-      - ./saved_prompt:/app/saved_prompt
-      - ./memories:/app/memories
+      # Service account for Google Cloud authentication
       - ./service-account.json:/app/service-account.json:ro
+      # Logs and data persistence
       - ${LOG_VOLUME:-./logs}:/app/logs
+      - ./data:/app/data
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
+    depends_on:
+      - redis
+
     networks:
-      - crm-network
+      - mas-network
 
     logging:
       driver: "json-file"
@@ -90,22 +85,22 @@ services:
           cpus: '${CPU_RESERVATION:-1.0}'
           memory: ${MEMORY_RESERVATION:-1G}
 
-  # Redis Cache Service
+  # Redis Cache Service (for conversation history)
   redis:
     image: redis:7-alpine
-    container_name: redis_cache_ai
+    container_name: mas-redis-cache
     restart: unless-stopped
 
     ports:
-      - "8900:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
     volumes:
-      - ./redis/data:/data
+      - redis_data:/data
 
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
 
     networks:
-      - crm-network
+      - mas-network
 
     logging:
       driver: "json-file"
@@ -113,38 +108,24 @@ services:
         max-size: "10m"
         max-file: "5"
 
-  # Postgres Database Service
-  postgres:
-    image: postgres:15-alpine
-    container_name: crm-postgres
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-    ports:
-      - "8901:5432"
-
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-crm_oxii_chatbot}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-
-    volumes:
-      - ./postgres/data:/var/lib/postgresql/data
-
-    networks:
-      - crm-network
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
 
 # Network configuration
 networks:
-  crm-network:
+  mas-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
 
 # Volumes for persistent storage
 volumes:
-  crm-logs:
+  redis_data:
+    driver: local
+  mas_logs:
     driver: local

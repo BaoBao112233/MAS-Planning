@@ -14,7 +14,7 @@ class EnvironmentSettings(BaseSettings):
     API_VERSION: str
     APP_NAME: str
     APP_DESC: str
-    APP_PORT: int
+    APP_PORT: int = 9000
     # Vertex AI settings
     MODEL_NAME: str = "gemini-2.5-pro"
     GOOGLE_CLOUD_PROJECT: str
@@ -39,6 +39,7 @@ class EnvironmentSettings(BaseSettings):
     REDIS_PORT: int
     REDIS_DB: int
     TTL_SECONDS: int = 3600
+    PLAN_API_BASE_URL: str
     # Debug settings
     MCP_SERVER_URL: str
     MAX_TURNS: int = 20

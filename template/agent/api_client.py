@@ -5,14 +5,15 @@ from typing import List, Dict, Optional
 from os import environ
 from dotenv import load_dotenv
 from datetime import datetime
+from template.configs.environments import env
 
 load_dotenv()
 
 class APIClient:
     """Client để gửi thông tin plan và task status lên Planner API server"""
     
-    def __init__(self, base_url: str = None):
-        self.base_url = base_url or environ.get("API_BASE_URL", "http://localhost:8000")
+    def __init__(self):
+        self.base_url = env.PLAN_API_BASE_URL
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
         self.current_plan_id = None

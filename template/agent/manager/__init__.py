@@ -267,7 +267,11 @@ class ManagerAgent(BaseAgent):
         """Enhanced fallback routing that considers conversation context"""
         query_lower = query.lower().strip()
         
-        # Check conversation history for context clues
+        # Priority 1: Check for explicit plan creation keywords (highest priority)
+        if any(word in query_lower for word in ['create plan', 'make plan', 'plan', 'create', 'setup', 'automate']):
+            return 'plan'
+        
+        # Priority 2: Check conversation history for context clues
         if self.chat_history.messages:
             recent_messages = self.chat_history.messages[-4:]  # Last 4 messages for context
             
@@ -296,7 +300,7 @@ class ManagerAgent(BaseAgent):
                             if any(word in prev_content for word in ['turn', 'set', 'control', 'adjust', 'device']):
                                 return 'tool'
         
-        # Fall back to standard keyword-based routing
+        # Priority 3: Fall back to standard keyword-based routing
         return self._fallback_routing(query)
     
     def _fallback_routing(self, query: str) -> str:
@@ -304,15 +308,25 @@ class ManagerAgent(BaseAgent):
         query_lower = query.lower()
         query_type = classify_query_type(query)
         
-        # Check for plan selection first (most specific)
-        if query_type == 'selection':
+        # Priority 1: Plan creation (highest priority)
+        if any(word in query_lower for word in ['create plan', 'plan', 'create', 'setup', 'automate', 'automation']):
             return 'plan'
-        elif any(word in query_lower for word in ['plan', 'create', 'setup', 'automate']):
+        
+        # Priority 2: Plan selection
+        elif query_type == 'selection':
             return 'plan'
+        
+        # Priority 3: Device control
         elif any(word in query_lower for word in ['turn', 'set', 'control', 'adjust']):
             return 'tool'
-        elif any(word in query_lower for word in ['analyze', 'think', 'reason', 'complex']):
-            return 'meta'
+        
+        # Priority 4: Analysis requests (be more specific to avoid conflicts)
+        elif any(word in query_lower for word in ['analyze', 'analysis', 'evaluate', 'assessment', 'think', 'reason']):
+            # Make sure it's not a plan request
+            if not any(word in query_lower for word in ['plan', 'create', 'setup', 'automate']):
+                return 'meta'
+        
+        # Default to direct for information questions
         else:
             return 'direct'
     
