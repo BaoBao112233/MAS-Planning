@@ -502,7 +502,12 @@ class PlanAgent(BaseAgent):
                     logger.info(f"🧠 MetaAgent analysis: {meta_result.get('output', 'No output')[:100]}...")
                     
                     # Step 3b: ToolAgent executes the specific action
-                    tool_result = self.tool_agent.invoke(task)
+                    # Pass token to ToolAgent for MCP tool authentication
+                    token = state.get('token', '')
+                    if token:
+                        tool_result = self.tool_agent.invoke({"input": task, "token": token})
+                    else:
+                        tool_result = self.tool_agent.invoke(task)
                     
                     if tool_result.get('tool_agent_result', False):
                         execution_results.append({
@@ -567,13 +572,13 @@ class PlanAgent(BaseAgent):
         
         # Update final plan status
         if self.api_client:
-            final_status = "completed" if failed_count == 0 else "partially_completed"
+            final_status = "completed" if failed_count == 0 else "completed"
             final_summary = f"Plan execution completed. {completed_count}/{total_tasks} tasks successful ({success_rate:.1f}%)"
             self.api_client.update_plan_status(final_status, final_summary)
         
         # Generate comprehensive output
         output = f"🎯 **{plan_type} Execution Complete**\n\n"
-        output += f"� **Summary:**\n"
+        output += f"📋 **Summary:**\n"
         output += f"• Total Tasks: {total_tasks}\n"
         output += f"• Completed: {completed_count}\n" 
         output += f"• Failed: {failed_count}\n"
@@ -646,10 +651,11 @@ class PlanAgent(BaseAgent):
 
         return graph.compile(debug=False)
 
-    def invoke(self,input:str, selected_plan_id: int = None, plan_options: dict = None):
+    def invoke(self,input:str, selected_plan_id: int = None, plan_options: dict = None, token: str = None):
         # Lưu thời gian bắt đầu và input để sử dụng cho API
         self.start_time = time.time()
         self.current_input = input
+        self.current_token = token  # Store token for use in sub-agents
         
         if self.verbose:
             print(f'Entering '+colored(self.name,'black','on_white'))
@@ -661,6 +667,7 @@ class PlanAgent(BaseAgent):
             'plan_options': plan_options or {},  # Use cached plan options if provided
             'needs_user_selection': False,
             'selected_plan_id': selected_plan_id,
+            'token': token,  # Add token to state
             'output': ''
         }
         agent_response=self.graph.invoke(state)

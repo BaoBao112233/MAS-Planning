@@ -9,6 +9,6 @@
 /.conda
 service-account.json
 */data
-*/__pycache__
+*/__pycache__/
 
 /logs

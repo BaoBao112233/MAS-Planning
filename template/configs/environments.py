@@ -40,6 +40,8 @@ class EnvironmentSettings(BaseSettings):
     REDIS_DB: int
     TTL_SECONDS: int = 3600
     PLAN_API_BASE_URL: str
+    PLAN_API_KEY: str
+
     # Debug settings
     MCP_SERVER_URL: str
     MAX_TURNS: int = 20

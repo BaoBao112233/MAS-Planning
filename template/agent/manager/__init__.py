@@ -402,13 +402,17 @@ How can I assist you today?"""
                 plan_selection = extract_plan_selection(user_input)
                 query_type = state.get('query_type', '')
                 
+                # Extract token from state for PlanAgent authentication
+                token = state.get('token', '')
+                
                 if (plan_selection and self._cached_plan_options) or query_type == 'selection':
                     # User is selecting from previously generated plans
                     if plan_selection:
                         delegation_result = self.plan_agent.invoke(
                             user_input, 
                             selected_plan_id=plan_selection,
-                            plan_options=self._cached_plan_options
+                            plan_options=self._cached_plan_options,
+                            token=token
                         )
                     else:
                         # Try to extract plan number from query_type selection
@@ -416,11 +420,12 @@ How can I assist you today?"""
                         delegation_result = self.plan_agent.invoke(
                             user_input,
                             selected_plan_id=fallback_selection,
-                            plan_options=self._cached_plan_options
+                            plan_options=self._cached_plan_options,
+                            token=token
                         )
                 else:
                     # New planning request
-                    delegation_result = self.plan_agent.invoke(user_input)
+                    delegation_result = self.plan_agent.invoke(user_input, token=token)
                     
                     # Cache plan options for future selections
                     if delegation_result.get('plan_options'):

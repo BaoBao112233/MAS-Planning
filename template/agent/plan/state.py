@@ -13,6 +13,7 @@ class PlanState(TypedDict, total=False):
     plan_options: dict  # Store plan options for user selection
     needs_user_selection: bool  # Flag to indicate if waiting for user selection
     selected_plan_id: Optional[int]  # User's selected plan ID
+    token: Optional[str]  # Authentication token for MCP tools
     output: str
 
 class UpdateState(TypedDict):

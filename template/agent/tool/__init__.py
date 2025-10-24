@@ -4,6 +4,7 @@ Tool Agent for MAS-Planning system using MCP tools
 import logging
 import json
 import asyncio
+import re
 from typing import Dict, List, Any, Optional, TypedDict
 from langchain_core.runnables.graph import MermaidDrawMethod
 from langgraph.graph import StateGraph, END
@@ -79,6 +80,41 @@ class ToolAgent:
         except Exception as e:
             logger.error(f"❌ MCP connection failed: {str(e)}")
             return []
+    
+    def detect_placeholder_tokens(self, text: str) -> List[str]:
+        """Detect placeholder tokens in text like 'your_auth_token', 'your_token', etc."""
+        # Pattern to match common placeholder tokens
+        patterns = [
+            r"token\s*=\s*['\"]your_auth_token['\"]",
+            r"token\s*=\s*['\"]your_token['\"]", 
+            r"token\s*=\s*['\"]auth_token['\"]",
+            r"token\s*=\s*['\"][^'\"]*token[^'\"]*['\"]"
+        ]
+        
+        found_tokens = []
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            found_tokens.extend(matches)
+        
+        return found_tokens
+    
+    def replace_placeholder_tokens(self, text: str, real_token: str) -> str:
+        """Replace placeholder tokens in text with real token"""
+        if not real_token:
+            return text
+        
+        # Patterns to replace
+        patterns = [
+            (r"token\s*=\s*['\"]your_auth_token['\"]", f"token='{real_token}'"),
+            (r"token\s*=\s*['\"]your_token['\"]", f"token='{real_token}'"),
+            (r"token\s*=\s*['\"]auth_token['\"]", f"token='{real_token}'"),
+        ]
+        
+        result = text
+        for pattern, replacement in patterns:
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+        
+        return result
     
     def router(self, state: ToolState):
         """Route input to appropriate action"""
@@ -208,7 +244,7 @@ class ToolAgent:
         
         if self.verbose:
             logger.info(f"🚀 Executing tool with query: {query}")
-            logger.info(f"� Using token: {token[:10]}..." if token else "🔑 No token provided")
+            logger.info(f"🔑 Using token: {token[:10]}..." if token else "🔑 No token provided")
             logger.info(f"🔧 Available tools: {len(self.tools)}")
             logger.info(f"🤖 LLM initialized: {self.llm is not None}")
         
@@ -221,6 +257,45 @@ class ToolAgent:
             return {**state, 'output': output, 'error': 'No MCP tools'}
         
         try:
+            # Step 1: Detect placeholder tokens in query
+            placeholder_tokens = self.detect_placeholder_tokens(query)
+            if placeholder_tokens and self.verbose:
+                logger.info(f"🔍 Detected placeholder tokens: {placeholder_tokens}")
+            
+            # Step 2: If placeholders detected or some MCP tools require a token,
+            # require the client to provide the token explicitly (no phone/password auto-login).
+            # This enforces the policy: token must come from the client request.
+            need_token = False
+            try:
+                for tool in self.tools:
+                    input_schema = getattr(tool, 'inputSchema', {}) or {}
+                    properties = input_schema.get('properties', {})
+                    if 'token' in properties:
+                        need_token = True
+                        break
+            except Exception:
+                # If tools schema inspection fails, be conservative and don't force-request here
+                need_token = False
+
+            if (placeholder_tokens or need_token) and not token:
+                # Request token from client — do NOT attempt phone/password login here
+                output = (
+                    "❗ Authentication token required from client to execute MCP tools.\n"
+                    "Please include the token in your request (e.g. add a `token` field in the JSON body)\n"
+                    "Example: { \"input\": \"turn off all devices in room X\", \"token\": \"<YOUR_OXII_TOKEN>\" }\n\n"
+                    "Note: For security we do NOT perform login via phone/password automatically."
+                )
+                return {**state, 'output': output, 'error': 'missing_token'}
+            
+            # Step 3: Replace placeholder tokens with provided client token (if any)
+            processed_query = query
+            if placeholder_tokens and token:
+                processed_query = self.replace_placeholder_tokens(query, token)
+                if processed_query != query and self.verbose:
+                    logger.info(f"🔄 Token replacement applied")
+                    logger.info(f"Original: {query[:100]}...")
+                    logger.info(f"Processed: {processed_query[:100]}...")
+            
             # Build system prompt with token information
             system_prompt = TOOL_PROMPT
             if token:
@@ -228,7 +303,7 @@ class ToolAgent:
             
             messages = [
                 SystemMessage(system_prompt),
-                HumanMessage(query)
+                HumanMessage(processed_query)  # Use processed query with replaced tokens
             ]
             
             # Convert to LangChain messages
