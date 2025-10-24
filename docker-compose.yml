@@ -13,39 +13,8 @@ services:
     ports:
       - "${HOST_PORT:-9000}:9000"
 
-    environment:
-      # Application settings
-      - API_VERSION=${API_VERSION:-v1}
-      - APP_NAME=${APP_NAME:-MAS Planning System}
-      - APP_DESC=${APP_DESC:-Multi-Agent Smart Home Planning System}
-      - APP_PORT=9000
-      
-      # Python environment
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-      - PYTHONDONTWRITEBYTECODE=1
-      
-      # Vertex AI settings
-      - MODEL_NAME=${MODEL_NAME:-gemini-2.5-pro}
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
-      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-east1}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-      
-      # Redis settings (for conversation history)
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=${REDIS_DB:-0}
-      - TTL_SECONDS=${TTL_SECONDS:-3600}
-      
-      # MCP Server settings
-      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://host.docker.internal:9031/sse}
-      - PLANNER_API_BASE_URL=${PLANNER_API_BASE_URL:-http://host.docker.internal:8000}
-      
-      # Multi-Agent System settings
-      - MAX_TURNS=${MAX_TURNS:-20}
-      - MAX_MSG=${MAX_MSG:-12}
-      - LIMIT_MINUTES=${LIMIT_MINUTES:-10}
-      - DEBUG_MODE=${DEBUG_MODE:-false}
+    env_file:
+      - .env
 
     volumes:
       # For development hot-reload (comment out for production)
