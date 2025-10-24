@@ -438,7 +438,12 @@ How can I assist you today?"""
             elif agent_type == 'tool':
                 # Route to Tool Agent with token
                 token = state.get('token', '')
-                delegation_result = self.tool_agent.invoke(user_input, token=token)
+                # Ensure input is in proper format with token
+                tool_input = {
+                    'input': user_input,
+                    'token': token
+                }
+                delegation_result = self.tool_agent.invoke(tool_input)
                 
             else:
                 # Unknown agent type

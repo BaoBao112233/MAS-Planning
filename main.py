@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from template.configs.environments import env
-from template.router.v1.ai import AiRouter, Prompt_Router
+from template.router.v1.ai import AiRouter, Router
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +33,7 @@ app.add_middleware(
 
 # Include the AI router
 app.include_router(AiRouter)
-app.include_router(Prompt_Router)
+app.include_router(Router)
 
 @app.get("/health")
 async def health_check():

@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, BackgroundTasks
 from cachetools import TTLCache
+import requests
 
 from template.agent.manager import ManagerAgent
 
@@ -34,9 +35,7 @@ AiRouter = APIRouter(
     prefix="/ai", tags=["Chat AI"]
 )
 
-Prompt_Router = APIRouter(
-    prefix="/prompt", tags=["Prompt Management"]
-)
+Router = APIRouter()
 
 cache = TTLCache(maxsize=500, ttl=300)
 
@@ -94,3 +93,33 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             error_status="error"
         )
 
+@Router.get("/token", response_model=str)
+async def get_token(
+    user_phone: str,
+    user_password: str,
+    user_country: str = "VI"
+):
+
+    """
+    Retrieve the MCP server token from environment variables
+    """
+
+    BASE_URL = env.OXII_ROOT_API_URL
+    url = f"{BASE_URL}/api/app/user/signin"
+
+    payload = json.dumps({
+        "phone": user_phone,
+        "password": user_password,
+        "country": user_country
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'X-Origin': 'smarthiz'
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload).json()
+    
+    if response['code'] == 200:
+        return response['data']['token']
+    else:
+        return None

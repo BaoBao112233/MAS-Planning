@@ -41,6 +41,7 @@ class EnvironmentSettings(BaseSettings):
     TTL_SECONDS: int = 3600
     PLAN_API_BASE_URL: str
     PLAN_API_KEY: str
+    OXII_ROOT_API_URL: str
 
     # Debug settings
     MCP_SERVER_URL: str

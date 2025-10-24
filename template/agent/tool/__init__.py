@@ -299,7 +299,18 @@ class ToolAgent:
             # Build system prompt with token information
             system_prompt = TOOL_PROMPT
             if token:
-                system_prompt += f"\n\nIMPORTANT: When calling MCP tools that require a 'token' parameter, use this authentication token: {token}"
+                system_prompt += f"""
+
+🔐 AUTHENTICATION TOKEN PROVIDED:
+Your authentication token is: {token}
+
+MANDATORY: Include this exact token in EVERY MCP tool call using the 'token' parameter.
+Example tool calls:
+- get_device_list(token="{token}")
+- switch_device_control(token="{token}", buttonId=123, action="on")
+- control_air_conditioner(token="{token}", power="on", mode="cool", temp="24")
+
+NEVER make tool calls without the token parameter - they will fail with authentication errors."""
             
             messages = [
                 SystemMessage(system_prompt),
@@ -353,6 +364,9 @@ class ToolAgent:
                                     token = state.get('token', '')
                                     if token:
                                         tool_args['token'] = token
+                                        logger.info(f"🔑 Token injected into tool args: {token[:20]}...")
+                                    else:
+                                        logger.warning(f"⚠️ No token available to inject into tool args")
                                     
                                     logger.info(f"🔧 Calling tool {tool_name} with args: {tool_args}")
                                     
@@ -424,8 +438,21 @@ class ToolAgent:
                                     
                                 # Process result - handle different response formats
                                 if isinstance(result, str):
-                                    # Handle string results (common for MCP tools)
-                                    if result.startswith("Tool call failed:"):
+                                    # Check for authentication errors
+                                    if any(phrase in result.lower() for phrase in [
+                                        "need a token", "token required", "authenticate", 
+                                        "authorization failed", "invalid token", "token expired"
+                                    ]):
+                                        auth_error_msg = (
+                                            "🔐 **Authentication Required**\n\n"
+                                            "The MCP tool requires a valid authentication token. "
+                                            "Please ensure you have provided a current OXII API token.\n\n"
+                                            f"Tool Response: {result}\n\n"
+                                            "💡 **Note**: If you believe you provided a valid token, "
+                                            "it may have expired. Please obtain a fresh token from the OXII system."
+                                        )
+                                        tool_results.append(f"**{tool_name}**: {auth_error_msg}")
+                                    elif result.startswith("Tool call failed:"):
                                         tool_results.append(f"**{tool_name}**: {result}")
                                     else:
                                         # Try to parse as JSON for prettier display
