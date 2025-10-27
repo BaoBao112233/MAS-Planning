@@ -1,6 +1,8 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import logging
 
 from template.configs.environments import env
@@ -34,6 +36,14 @@ app.add_middleware(
 # Include the AI router
 app.include_router(AiRouter)
 app.include_router(Router)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def root():
+    """Serve the main demo page"""
+    return FileResponse('static/index.html')
 
 @app.get("/health")
 async def health_check():
