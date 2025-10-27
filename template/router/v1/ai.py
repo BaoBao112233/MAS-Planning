@@ -37,9 +37,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ElevenLabs configuration
-ELEVENLABS_API_KEY = "sk_6311380010ae14d3dc1c00641b0af94e4c55a81500e26dc1"
-ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
-DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY
+ELEVENLABS_BASE_URL = env.ELEVENLABS_BASE_URL  
+DEFAULT_VOICE_ID = env.ELEVENLABS_VOICE_ID
 
 async def text_to_speech(text: str) -> bytes:
     """Convert text to speech using ElevenLabs API"""
@@ -59,7 +59,7 @@ async def text_to_speech(text: str) -> bytes:
     }
     
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=data, headers=headers)
+        response = await client.post(url, json=data, headers=headers, timeout=3600000.0)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail="Failed to generate speech")
         return response.content
@@ -84,7 +84,7 @@ async def speech_to_text(audio_file: UploadFile) -> str:
             data = {"model_id": "eleven_multilingual_sts_v2"}
             
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, files=files, data=data, headers=headers)
+                response = await client.post(url, files=files, data=data, headers=headers, timeout=3600000.0)
                 if response.status_code != 200:
                     raise HTTPException(status_code=response.status_code, detail="Failed to convert speech to text")
                 
@@ -163,12 +163,12 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             )
             
             # Schedule cleanup of temporary file after some time
-            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600)  # 1 hour
+            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600000)  # 1 hour
             
             return response_with_audio
             
         except Exception as e:
-            logger.error(f"Error generating audio: {str(e)}")
+            logger.error(f"Error generating audio: {str(e)}", exc_info=True)
             # Return response without audio if TTS fails
             return ChatResponse(
                 sessionId=request.sessionId,

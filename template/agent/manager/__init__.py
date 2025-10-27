@@ -386,6 +386,7 @@ How can I assist you today?"""
                 
                 delegation_result = {
                     'output': direct_answer,
+                    'direct_answer': direct_answer,  # Add this for format_final_response
                     'agent_type': 'direct',
                     'success': True
                 }

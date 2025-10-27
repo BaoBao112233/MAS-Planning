@@ -37,20 +37,24 @@ class PlanAgent(BaseAgent):
         
         self.name = "Plan Agent"
 
-        # self.llm = ChatVertexAI(
-        #     model_name=model,
-        #     temperature=temperature,
-        #     tools=self.tools,
-        #     project=env.GOOGLE_CLOUD_PROJECT,
-        #     location=env.GOOGLE_CLOUD_LOCATION
-        # )
-
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
 
         self.tools = []
-        self.llm = None
+        
+        # Initialize LLM immediately for basic functionality
+        try:
+            self.llm = ChatVertexAI(
+                model_name=model,
+                temperature=temperature,
+                project=env.GOOGLE_CLOUD_PROJECT,
+                location=env.GOOGLE_CLOUD_LOCATION
+            )
+            logger.info(f"✅ LLM initialized successfully for PlanAgent")
+        except Exception as e:
+            logger.error(f"❌ Error initializing LLM: {str(e)}")
+            self.llm = None
 
         logger.info(f"PlanAgent initialized with model={model}, temperature={temperature}")
 
