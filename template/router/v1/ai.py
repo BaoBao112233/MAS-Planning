@@ -2,10 +2,15 @@ from typing import Union
 import logging
 import json
 import os
+import io
+import tempfile
 from datetime import datetime
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, File, UploadFile, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from cachetools import TTLCache
 import requests
+import httpx
+import aiofiles
 
 from template.agent.manager import ManagerAgent
 
@@ -31,6 +36,64 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ElevenLabs configuration
+ELEVENLABS_API_KEY = "sk_6311380010ae14d3dc1c00641b0af94e4c55a81500e26dc1"
+ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
+DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+
+async def text_to_speech(text: str) -> bytes:
+    """Convert text to speech using ElevenLabs API"""
+    url = f"{env.ELEVENLABS_BASE_URL}/text-to-speech/{env.ELEVENLABS_VOICE_ID}"
+    headers = {
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": env.ELEVENLABS_API_KEY
+    }
+    data = {
+        "text": text,
+        "model_id": env.ELEVENLABS_MODEL_ID,
+        "voice_settings": {
+            "stability": env.ELEVENLABS_STABILITY,
+            "similarity_boost": env.ELEVENLABS_SIMILARITY_BOOST
+        }
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=data, headers=headers)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Failed to generate speech")
+        return response.content
+
+async def speech_to_text(audio_file: UploadFile) -> str:
+    """Convert speech to text using ElevenLabs API"""
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        content = await audio_file.read()
+        temp_file.write(content)
+        temp_file_path = temp_file.name
+    
+    try:
+        # ElevenLabs Speech-to-Text API
+        url = f"{ELEVENLABS_BASE_URL}/speech-to-text"
+        headers = {
+            "xi-api-key": ELEVENLABS_API_KEY
+        }
+        
+        with open(temp_file_path, 'rb') as f:
+            files = {"audio": f}
+            data = {"model_id": "eleven_multilingual_sts_v2"}
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, files=files, data=data, headers=headers)
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail="Failed to convert speech to text")
+                
+                result = response.json()
+                return result.get("text", "")
+    finally:
+        # Clean up temporary file
+        os.unlink(temp_file_path)
+
 AiRouter = APIRouter(
     prefix="/ai", tags=["Chat AI"]
 )
@@ -40,9 +103,9 @@ Router = APIRouter()
 cache = TTLCache(maxsize=500, ttl=300)
 
 
-@AiRouter.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
-    """Process a chat message and return a response"""
+@AiRouter.post("/chat/text", response_model=ChatResponse)
+async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
+    """Process a text chat message and return response with audio file"""
     try:
         # Lấy prompt từ file JSON nếu có chatId
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
@@ -78,12 +141,40 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
 
         logger.info(f'📝 Response: {response}')
         
-        # Manager Agent provides formatted response directly
-        return ChatResponse(
-            sessionId=request.sessionId,
-            response=response.get('output', 'Request processed successfully'),
-            error_status="success" if response.get('success', True) else "error"
-        )
+        response_text = response.get('output', 'Request processed successfully')
+        
+        # Generate audio file from response text
+        try:
+            audio_content = await text_to_speech(response_text)
+            
+            # Save audio file temporarily
+            audio_filename = f"response_{request.sessionId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            temp_audio_path = f"/tmp/{audio_filename}"
+            
+            with open(temp_audio_path, 'wb') as f:
+                f.write(audio_content)
+            
+            # Add audio file info to response
+            response_with_audio = ChatResponse(
+                sessionId=request.sessionId,
+                response=response_text,
+                error_status="success" if response.get('success', True) else "error",
+                audio_file_url=f"/ai/download/audio/{audio_filename}"
+            )
+            
+            # Schedule cleanup of temporary file after some time
+            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600)  # 1 hour
+            
+            return response_with_audio
+            
+        except Exception as e:
+            logger.error(f"Error generating audio: {str(e)}")
+            # Return response without audio if TTS fails
+            return ChatResponse(
+                sessionId=request.sessionId,
+                response=response_text,
+                error_status="success" if response.get('success', True) else "error"
+            )
         
     except Exception as e:
         logger.error(f"Error processing chat request: {str(e)}", exc_info=True)
@@ -92,6 +183,120 @@ async def chat(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             response="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
             error_status="error"
         )
+
+@AiRouter.post("/chat/audio")
+async def chat_audio(
+    sessionId: str,
+    conversationId: str,
+    token: str,
+    audio_file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None
+):
+    """Process an audio chat message and return response with both text and audio"""
+    try:
+        logger.info(f'🎵 Audio chat - sessionId: {sessionId} | file: {audio_file.filename}')
+        
+        # Validate audio file
+        if not audio_file.content_type.startswith('audio/'):
+            raise HTTPException(status_code=400, detail="File must be an audio file")
+        
+        # Convert audio to text
+        transcribed_text = await speech_to_text(audio_file)
+        logger.info(f'📝 Transcribed text: {transcribed_text}')
+        
+        if not transcribed_text.strip():
+            raise HTTPException(status_code=400, detail="Could not transcribe audio")
+        
+        # Process the transcribed text through the chatbot
+        agent = ManagerAgent(
+            temperature=0.2,
+            model=env.MODEL_NAME,
+            verbose=True,
+            session_id=sessionId,
+            conversation_id=conversationId
+        )
+
+        # Check if this is a plan selection and retrieve cached plan options
+        session_key = f"{sessionId}_{conversationId}"   
+        cached_plans = session_cache.get(session_key)
+        
+        # Pass cached plans to the manager agent if available
+        context = {}
+        if cached_plans:
+            context['cached_plan_options'] = cached_plans
+        
+        input_data = {
+            "message": transcribed_text,
+            "token": token
+        }
+        
+        # Manager Agent handles all routing internally
+        response = agent.invoke(input_data, context=context)
+
+        # Store plan options in cache if response contains them
+        if 'plan_options' in response:
+            session_cache[session_key] = response['plan_options']
+            logger.info(f"💾 Stored plan options for session {session_key}")
+
+        logger.info(f'📝 Response: {response}')
+        
+        response_text = response.get('output', 'Request processed successfully')
+        
+        # Generate audio file from response text
+        audio_content = await text_to_speech(response_text)
+        
+        # Save audio file temporarily
+        audio_filename = f"response_{sessionId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+        temp_audio_path = f"/tmp/{audio_filename}"
+        
+        with open(temp_audio_path, 'wb') as f:
+            f.write(audio_content)
+        
+        # Schedule cleanup of temporary file after some time
+        if background_tasks:
+            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600)  # 1 hour
+        
+        return {
+            "sessionId": sessionId,
+            "transcribed_text": transcribed_text,
+            "response": response_text,
+            "error_status": "success" if response.get('success', True) else "error",
+            "audio_file_url": f"/ai/download/audio/{audio_filename}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing audio chat request: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại."
+        )
+
+@AiRouter.get("/download/audio/{filename}")
+async def download_audio(filename: str):
+    """Download generated audio file"""
+    file_path = f"/tmp/{filename}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="audio/wav"
+    )
+
+async def cleanup_temp_file(file_path: str, delay: int = 0):
+    """Clean up temporary files after a delay"""
+    import asyncio
+    if delay > 0:
+        await asyncio.sleep(delay)
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+            logger.info(f"🗑️ Cleaned up temporary file: {file_path}")
+    except Exception as e:
+        logger.error(f"Error cleaning up file {file_path}: {str(e)}")
 
 @Router.get("/token", response_model=str)
 async def get_token(

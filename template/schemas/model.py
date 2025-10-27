@@ -27,6 +27,7 @@ class ChatResponse(BaseModel):
     sessionId: str
     response: str
     error_status: str = "success"
+    audio_file_url: Optional[str] = Field(None, description="URL to download audio file if available")
 
 # Request models
 class ChatRequestAPI(BaseModel):

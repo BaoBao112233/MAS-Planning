@@ -42,7 +42,13 @@ class EnvironmentSettings(BaseSettings):
     PLAN_API_BASE_URL: str
     PLAN_API_KEY: str
     OXII_ROOT_API_URL: str
-
+    # ElevenLabs API settings
+    ELEVENLABS_BASE_URL: str
+    ELEVENLABS_API_KEY: str
+    ELEVENLABS_MODEL_ID: str
+    ELEVENLABS_VOICE_ID: str
+    ELEVENLABS_STABILITY: float = 0.5
+    ELEVENLABS_SIMILARITY_BOOST: float = 0.5
     # Debug settings
     MCP_SERVER_URL: str
     MAX_TURNS: int = 20
