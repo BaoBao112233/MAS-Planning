@@ -13,7 +13,7 @@ from template.message.message import HumanMessage, SystemMessage
 from template.configs.environments import env
 from langchain_google_vertexai import ChatVertexAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from template.agent.tool.prompt import TOOL_PROMPT
+from template.agent.tool.prompt import TOOL_PROMPT, TOOL_PROMPTS
 from termcolor import colored
 
 logger = logging.getLogger(__name__)

@@ -15,8 +15,7 @@ from langgraph.graph import MessagesState
 from template.configs.environments import get_environment_variables
 from template.schemas.model import (
     ChatRequest, 
-    ChatResponse,
-    ResponseFormatter
+    ChatResponse
 )
 from template.agent.histories import RedisSupportChatHistory
 from template.configs.environments import env
