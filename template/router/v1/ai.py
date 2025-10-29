@@ -13,6 +13,7 @@ import httpx
 import aiofiles
 import traceback
 from langfuse import Langfuse
+from termcolor import colored
 
 from template.agent.manager import ManagerAgent
 
@@ -153,7 +154,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             session_cache[session_key] = response['plan_options']
             logger.info(f"💾 Stored plan options for session {session_key}")
 
-        logger.info(f'📝 Response: {response}')
+        # logger.info(f'📝 Response: {response}')
         
         response_text = response.get('output', 'Request processed successfully')
         
@@ -275,7 +276,7 @@ async def chat_audio(
             session_cache[session_key] = response['plan_options']
             logger.info(f"💾 Stored plan options for session {session_key}")
 
-        logger.info(f'📝 Response: {response}')
+        # logger.info(f'📝 Response: {response}')
         
         response_text = response.get('output', 'Request processed successfully')
         
@@ -333,7 +334,7 @@ async def cleanup_temp_file(file_path: str, delay: int = 0):
             os.unlink(file_path)
             logger.info(f"🗑️ Cleaned up temporary file: {file_path}")
     except Exception as e:
-        logger.error(f"Error cleaning up file {file_path}: {str(e)}")
+        logger.error(colored(f"Error cleaning up file {file_path}: {str(e)}", "red", attrs=["bold"]))
 
 @Router.get("/token", response_model=str)
 async def get_token(

@@ -92,7 +92,7 @@ class ToolAgent:
             import nest_asyncio
             nest_asyncio.apply()
         except ImportError:
-            logger.warning("nest_asyncio not installed. May have issues in nested event loops.")
+            logger.warning(colored("nest_asyncio not installed. May have issues in nested event loops.", "yellow", attrs=["bold"]))
         
         self.mcp_client = MultiServerMCPClient(
             {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
@@ -118,9 +118,9 @@ class ToolAgent:
             self.llm = base_llm
 
         if self.verbose:
-            logger.info(f"🔧 Loaded {len(self.tools)} MCP tools")
-            for t in self.tools:
-                logger.info(f"🔹 {t.name} - {getattr(t, 'description', '')}")
+            logger.info(colored(f"🔧 Loaded {len(self.tools)} MCP tools", "green", attrs=["bold"]))
+            # for t in self.tools:
+            #     logger.info(colored(f"🔹 {t.name} - {getattr(t, 'description', '')}"), "green", attrs=["bold"])
 
     async def cleanup(self):
         """Cleanup MCP client connection"""
@@ -133,7 +133,7 @@ class ToolAgent:
     async def reason_and_plan(self, state: ToolState) -> ToolState:
         """LLM reasoning: phân tích input và quyết định tool calls"""
         if self.verbose:
-            logger.info(f"\n{'='*50}\n🧠 REASONING PHASE (Iteration {state['iteration']})\n{'='*50}")
+            logger.info(colored(f"🧠 REASONING PHASE (Iteration {state['iteration']})", "green", attrs=["bold"]))
         
         try:
             messages = state.get("messages", [])
@@ -146,6 +146,7 @@ class ToolAgent:
                 user_msg = HumanMessage(content=f"{token_info}User request: {state['input']}")
                 messages = [system_msg, user_msg]
             
+            
             # Call LLM with tools
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
@@ -155,11 +156,11 @@ class ToolAgent:
             )
             
             if self.verbose:
-                logger.info(f"💭 LLM Response: {response.content[:200]}...")
+                logger.info(colored(f"💭 LLM Response: {response.content[:200]}...", "green", attrs=["bold"]))
                 if hasattr(response, 'tool_calls') and response.tool_calls:
-                    logger.info(f"🔧 Tool calls planned: {len(response.tool_calls)}")
+                    logger.info(colored(f"🔧 Tool calls planned: {len(response.tool_calls)}", "green", attrs=["bold"]))
                     for tc in response.tool_calls:
-                        logger.info(f"   → {tc['name']}({tc['args']})")
+                        logger.info(colored(f"   → {tc['name']}({tc['args']})", "green", attrs=["bold"]))
             
             # Update state
             messages.append(response)
@@ -184,7 +185,7 @@ class ToolAgent:
     async def execute_tools_parallel(self, state: ToolState) -> ToolState:
         """Execute multiple tool calls with smart parallel/sequential logic"""
         if self.verbose:
-            logger.info(f"\n{'='*50}\n⚙️ EXECUTION PHASE\n{'='*50}")
+            logger.info(colored(f"\n{'='*50}\n⚙️ EXECUTION PHASE\n{'='*50}", "green", attrs=["bold"]))
         
         tool_calls = state.get("tool_calls", [])
         if not tool_calls:
@@ -196,10 +197,10 @@ class ToolAgent:
         # PHASE 1: Execute independent tools in parallel
         if independent_calls:
             if self.verbose:
-                logger.info(f"🚀 Phase 1: Executing {len(independent_calls)} independent tools in parallel")
+                logger.info(colored(f"🚀 Phase 1: Executing {len(independent_calls)} independent tools in parallel", "green", attrs=["bold"]))
                 for tc in independent_calls:
-                    logger.info(f"   → {tc['name']}")
-            
+                    logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
+
             parallel_results = await asyncio.gather(
                 *[self._execute_single_tool(tc, state["token"]) for tc in independent_calls],
                 return_exceptions=True
@@ -214,26 +215,26 @@ class ToolAgent:
             
             if prereqs:
                 if self.verbose:
-                    logger.info(f"📋 Phase 2a: Executing {len(prereqs)} prerequisite tool(s) sequentially")
+                    logger.info(colored(f"📋 Phase 2a: Executing {len(prereqs)} prerequisite tool(s) sequentially", "green", attrs=["bold"]))
                 for tc in prereqs:
                     if self.verbose:
-                        logger.info(f"   → {tc['name']}")
+                        logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
                     result = await self._execute_single_tool(tc, state["token"])
                     results.append(result)
             
             if controls:
                 if len(controls) == 1:
                     if self.verbose:
-                        logger.info(f"⚙️ Phase 2b: Executing 1 control tool")
-                        logger.info(f"   → {controls[0]['name']}")
+                        logger.info(colored(f"⚙️ Phase 2b: Executing 1 control tool", "green", attrs=["bold"]))
+                        logger.info(colored(f"   → {controls[0]['name']}", "green", attrs=["bold"]))
                     result = await self._execute_single_tool(controls[0], state["token"])
                     results.append(result)
                 else:
                     if self.verbose:
-                        logger.info(f"⚡ Phase 2b: Executing {len(controls)} control tools in parallel")
+                        logger.info(colored(f"⚡ Phase 2b: Executing {len(controls)} control tools in parallel", "green", attrs=["bold"]))
                         for tc in controls:
-                            logger.info(f"   → {tc['name']}")
-                    
+                            logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
+
                     parallel_controls = await asyncio.gather(
                         *[self._execute_single_tool(tc, state["token"]) for tc in controls],
                         return_exceptions=True
@@ -274,7 +275,7 @@ class ToolAgent:
         state["iteration"] += 1
         
         if self.verbose:
-            logger.info(f"✅ Execution complete. Total results: {len(results)}")
+            logger.info(colored(f"✅ Execution complete. Total results: {len(results)}", "green", attrs=["bold"]))
         
         return state
 
@@ -336,12 +337,12 @@ class ToolAgent:
             tool_args["token"] = token
             
             if self.verbose:
-                logger.info(f"🔧 Calling {tool_name} with args: {tool_args}")
+                logger.info(colored(f"🔧 Calling {tool_name} with args: {tool_args}", "green", attrs=["bold"]))
             
             # ✅ FIX: Create fresh MCP client for each tool call
             # This avoids SSE connection deadlock in nested async contexts
-            logger.info(f"⏳ Creating fresh MCP client for {tool_name}...")
-            
+            logger.info(colored(f"⏳ Creating fresh MCP client for {tool_name}...", "green", attrs=["bold"]))
+
             temp_client = MultiServerMCPClient(
                 {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
             )
@@ -357,14 +358,14 @@ class ToolAgent:
                 raise ValueError(f"Tool '{tool_name}' not found in available tools")
             
             # Call tool with timeout
-            logger.info(f"⏳ Invoking {tool_name}...")
+            logger.info(colored(f"⏳ Invoking {tool_name}...", "green", attrs=["bold"]))
             result = await asyncio.wait_for(
                 tool.ainvoke(tool_args),
                 timeout=60.0  # 60 seconds timeout
             )
             
             if self.verbose:
-                logger.info(f"✅ {tool_name} completed: {str(result)[:200]}...")
+                logger.info(colored(f"✅ {tool_name} completed: {str(result)[:200]}...", "green", attrs=["bold"]))
             
             return {
                 "tool_call_id": tool_id,
@@ -396,9 +397,9 @@ class ToolAgent:
             if temp_client:
                 try:
                     await temp_client.__aexit__(None, None, None)
-                    logger.info(f"🧹 Cleaned up MCP client for {tool_call.get('name', 'unknown')}")
+                    logger.info(colored(f"🧹 Cleaned up MCP client for {tool_call.get('name', 'unknown')}", "green", attrs=["bold"]))
                 except Exception as cleanup_error:
-                    logger.warning(f"⚠️ Error cleaning up MCP client: {cleanup_error}")
+                    logger.warning(colored(f"⚠️ Error cleaning up MCP client: {cleanup_error}", "yellow", attrs=["bold"]))
 
     # ==========================================================
     # Router Logic
@@ -407,7 +408,7 @@ class ToolAgent:
         """Decide whether to continue reasoning or finish"""
         if state["iteration"] >= state["max_iterations"]:
             if self.verbose:
-                logger.info("🛑 Max iterations reached")
+                logger.warning(colored("🛑 Max iterations reached", "yellow", attrs=["bold"]))
             return "finish"
         
         if state.get("tool_calls"):
@@ -484,7 +485,7 @@ class ToolAgent:
         }
         
         if self.verbose:
-            logger.info(f"\n{'='*60}\n🎯 NEW REQUEST: {query}\n{'='*60}")
+            logger.info(colored(f"🎯 NEW REQUEST: {query}", "green", attrs=["bold"]))
         
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -494,7 +495,7 @@ class ToolAgent:
         )
         
         if self.verbose:
-            logger.info(f"\n{'='*60}\n✨ FINAL OUTPUT:\n{result.get('output', 'No output')}\n{'='*60}\n")
+            logger.info(colored(f"✨ FINAL OUTPUT: {result.get('output', 'No output')}", "green", attrs=["bold"]))
         
         return result
 

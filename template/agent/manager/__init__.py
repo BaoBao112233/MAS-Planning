@@ -119,7 +119,7 @@ class ManagerAgent(BaseAgent):
                         loop.run_until_complete(self._plan_agent.init_async())
                         logger.info("📋 Plan Agent initialized with LLM")
                     except Exception as e:
-                        logger.warning(f"⚠️ Plan Agent async init failed: {e}")
+                        logger.warning(colored(f"⚠️ Plan Agent async init failed: {e}"), 'yellow')
                     finally:
                         loop.close()
                 
@@ -129,10 +129,10 @@ class ManagerAgent(BaseAgent):
                 thread.join(timeout=10)  # Wait max 10 seconds
                 
                 if thread.is_alive():
-                    logger.warning("⚠️ Plan Agent async init timeout")
+                    logger.warning(colored("⚠️ Plan Agent async init timeout"), 'yellow')
                     
             except Exception as e:
-                logger.warning(f"⚠️ Could not init Plan Agent async: {e}")
+                logger.warning(colored(f"⚠️ Could not init Plan Agent async: {e}"), 'yellow')
                 logger.info("🧪 Plan Agent will use fallback mode")
             
             logger.info("📋 Plan Agent loaded")
@@ -174,10 +174,10 @@ class ManagerAgent(BaseAgent):
                 thread.join(timeout=10)
                 
                 if thread.is_alive():
-                    logger.warning("⚠️ ToolAgent async init timeout")
+                    logger.warning(colored("⚠️ ToolAgent async init timeout"), 'yellow')
                     
             except Exception as e:
-                logger.warning(f"⚠️ Could not init ToolAgent async: {e}")
+                logger.warning(colored(f"⚠️ Could not init ToolAgent async: {e}"), 'yellow')
             
             logger.info("🔧 Tool Agent loaded")
         return self._tool_agent
@@ -456,7 +456,7 @@ How can I assist you today?"""
             
             # Validate result
             if not validate_agent_result(delegation_result, agent_type):
-                logger.warning(f"⚠️ Invalid result from {agent_type} agent")
+                logger.warning(colored(f"⚠️ Invalid result from {agent_type} agent"), 'yellow')
                 delegation_result = {
                     'output': 'I apologize, but there was an issue processing your request.',
                     'success': False,

@@ -57,7 +57,7 @@ class Agent:
                 location=env.GOOGLE_CLOUD_LOCATION
             )
 
-            logger.info(f"Initialized ChatVertexAI with model={model}, project={env.GOOGLE_CLOUD_PROJECT}, location={env.GOOGLE_CLOUD_LOCATION}")
+            logger.info(colored(f"Initialized ChatVertexAI with model={model}, project={env.GOOGLE_CLOUD_PROJECT}, location={env.GOOGLE_CLOUD_LOCATION}"), 'green')
         except Exception as e:
             logger.error(f"Error initializing ChatVertexAI: {str(e)}")
             raise

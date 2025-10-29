@@ -47,7 +47,7 @@ def extract_manager_response(content: str) -> Dict[str, Any]:
                 confidence = float(confidence_match.group(1).strip())
                 result['confidence'] = max(0.0, min(1.0, confidence))  # Clamp to [0,1]
             except ValueError:
-                logger.warning("Could not parse confidence score, using default 0.5")
+                logger.warning(colored("Could not parse confidence score, using default 0.5"), 'yellow')
         
         # Extract explanation
         explanation_match = re.search(r'<explanation>(.*?)</explanation>', content, re.DOTALL)

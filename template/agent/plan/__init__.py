@@ -126,10 +126,10 @@ class PlanAgent(BaseAgent):
                 thread.join(timeout=10)  # Wait max 10 seconds
                 
                 if thread.is_alive():
-                    logger.warning("⚠️ ToolAgent async init timeout")
+                    logger.warning(colored("⚠️ ToolAgent async init timeout"), 'yellow')
                     
             except Exception as e:
-                logger.warning(f"⚠️ Could not init ToolAgent async: {e}")
+                logger.warning(colored(f"⚠️ Could not init ToolAgent async: {e}"), 'yellow')
                 logger.info("🧪 ToolAgent will use fallback mode")
 
     def router(self, state: PlanState):
@@ -199,7 +199,7 @@ class PlanAgent(BaseAgent):
             # Validate that we got plans
             if not any(plan_data.get(key) for key in ['Security_Plan', 'Convenience_Plan', 'Energy_Plan']):
                 if self.verbose:
-                    logger.warning("Warning: No plans extracted from LLM response, using fallback data")
+                    logger.warning(colored("Warning: No plans extracted from LLM response, using fallback data"), 'yellow')
                 # Fallback to dummy data if extraction failed
                 plan_data = {
                     'Security_Plan': [
@@ -474,7 +474,7 @@ class PlanAgent(BaseAgent):
                     # Update plan status to execution started
                     self.api_client.update_plan_status("in_progress")
                 else:
-                    logger.warning("⚠️ Failed to upload plan to API, continuing with execution")
+                    logger.warning(colored("⚠️ Failed to upload plan to API, continuing with execution"), 'yellow')
             except Exception as e:
                 logger.error(f"❌ API upload error: {str(e)}, continuing with execution")
         
