@@ -146,7 +146,6 @@ class ToolAgent:
                 user_msg = HumanMessage(content=f"{token_info}User request: {state['input']}")
                 messages = [system_msg, user_msg]
             
-            
             # Call LLM with tools
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
@@ -166,13 +165,18 @@ class ToolAgent:
             messages.append(response)
             state["messages"] = messages
             
-            # Extract tool calls
+            # ✅ FIX: Handle both tool_calls and final output properly
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 state["tool_calls"] = response.tool_calls
+                # Clear output since we're not done yet
+                state["output"] = ""
             else:
-                # No more tool calls, finish
-                state["output"] = response.content
+                # No more tool calls, this is the final answer
                 state["tool_calls"] = []
+                state["output"] = response.content
+                
+                if self.verbose:
+                    logger.info(colored(f"✅ Final answer ready: {response.content[:100]}...", "green", attrs=["bold"]))
             
             return state
             
@@ -180,7 +184,9 @@ class ToolAgent:
             logger.error(f"❌ Reasoning error: {e}", exc_info=True)
             state["error"] = str(e)
             state["tool_calls"] = []
+            state["output"] = f"Error during reasoning: {str(e)}"
             return state
+
 
     async def execute_tools_parallel(self, state: ToolState) -> ToolState:
         """Execute multiple tool calls with smart parallel/sequential logic"""
