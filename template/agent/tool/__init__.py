@@ -475,7 +475,7 @@ class ToolAgent:
     # ==========================================================
     async def ainvoke(self, input_data, **kwargs):
         """Async entry point for agent invocation"""
-        token = kwargs.get("token", "")
+        token = kwargs.get("token", "") or input_data.get("token", "")
         query = input_data["input"] if isinstance(input_data, dict) else input_data
         
         initial_state: ToolState = {
@@ -492,6 +492,7 @@ class ToolAgent:
         
         if self.verbose:
             logger.info(colored(f"🎯 NEW REQUEST: {query}", "green", attrs=["bold"]))
+            logger.info(colored(f"🔑 ToolAgent token: {token[:10] if token else 'None'}...", "green", attrs=["bold"]))
         
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(

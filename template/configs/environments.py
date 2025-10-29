@@ -56,7 +56,7 @@ class EnvironmentSettings(BaseSettings):
     LANGFUSE_PROJECT_NAME: str = "MAS-Planning"
     # Debug settings
     MCP_SERVER_URL: str
-    MAX_TURNS: int = 20
+    MAX_ITERATIONS: int = 10
     LIMIT_MINUTES: int = 10
     MAX_MSG: int = 12
     DEBUG_MODE: bool = False

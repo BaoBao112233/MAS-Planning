@@ -19,6 +19,7 @@ from template.agent.manager import ManagerAgent
 
 # Session cache to store plan options for plan selection
 session_cache = TTLCache(maxsize=1000, ttl=3600)  # 1 hour TTL
+from template.agent.plan import PlanAgent
 from template.agent.tool import ToolAgent
 from template.configs.environments import env
 from template.schemas.model import (
@@ -119,18 +120,38 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
     try:
         # Lấy prompt từ file JSON nếu có chatId
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
+        logger.info(f'🔑 Token received: {request.token[:10] if request.token else "None"}...')
         
-        agent = ToolAgent(
+        # agent = ToolAgent(
+        #     temperature=0.2,
+        #     model=env.MODEL_NAME,
+        #     verbose=True,
+        #     max_iterations=env.MAX_ITERATIONS,
+        #     # session_id=request.sessionId,  # Pass session_id for chat history
+        #     # conversation_id=request.conversationId
+        # )
+
+        agent = ManagerAgent(
             temperature=0.2,
             model=env.MODEL_NAME,
             verbose=True,
-            # session_id=request.sessionId,  # Pass session_id for chat history
-            # conversation_id=request.conversationId
+            session_id=request.sessionId,
+            conversation_id=request.conversationId,
+            max_iteration=env.MAX_ITERATIONS
         )
 
-        logger.info("🔄 Initializing ToolAgent MCP tools...")
-        await agent.init_async()
-        logger.info(f"✅ ToolAgent initialized with {len(agent.tools)} MCP tools")
+        # agent = PlanAgent(
+        #     temperature=0.2,
+        #     model=env.MODEL_NAME,
+        #     verbose=True,
+        #     # session_id=request.sessionId,
+        #     # conversation_id=request.conversationId,
+        #     max_iteration=env.MAX_ITERATIONS
+        # )
+
+        # logger.info("🔄 Initializing ToolAgent MCP tools...")
+        # await agent.init_async()
+        # logger.info(f"✅ ToolAgent initialized with {len(agent.tools)} MCP tools")
 
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   
@@ -146,8 +167,10 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             "token": request.token
         }
         
-                # Tool Agent handles all routing internally
-        response = await agent.ainvoke(input_data, token=request.token, context=context)
+        logger.info(f'📤 Input data token: {input_data.get("token", "None")[:10]}...')
+        
+         # Tool Agent handles all routing internally
+        response = agent.invoke(input_data, context=context)
 
         # Store plan options in cache if response contains them
         if 'plan_options' in response:
@@ -163,7 +186,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             audio_content = await text_to_speech(response_text)
             
             # Save audio file temporarily
-            audio_filename = f"response_{request.sessionId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
             temp_audio_path = f"/tmp/{audio_filename}"
             
             with open(temp_audio_path, 'wb') as f:
@@ -284,7 +307,7 @@ async def chat_audio(
         audio_content = await text_to_speech(response_text)
         
         # Save audio file temporarily
-        audio_filename = f"response_{sessionId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+        audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
         temp_audio_path = f"/tmp/{audio_filename}"
         
         with open(temp_audio_path, 'wb') as f:

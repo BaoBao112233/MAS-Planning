@@ -439,12 +439,31 @@ How can I assist you today?"""
             elif agent_type == 'tool':
                 # Route to Tool Agent with token
                 token = state.get('token', '')
+                if self.verbose:
+                    logger.info(f"🔧 Routing to ToolAgent with token: {token[:10] if token else 'None'}...")
+                
                 # Ensure input is in proper format with token
                 tool_input = {
                     'input': user_input,
                     'token': token
                 }
-                delegation_result = self.tool_agent.invoke(tool_input)
+                
+                # Call ToolAgent ainvoke since invoke raises error in async context
+                import asyncio
+                import concurrent.futures
+                
+                def call_tool_agent(input_data):
+                    return asyncio.run(self.tool_agent.ainvoke(input_data))
+                
+                try:
+                    loop = asyncio.get_running_loop()
+                    # In async context, run in thread to avoid event loop conflict
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(call_tool_agent, tool_input)
+                        delegation_result = future.result()
+                except RuntimeError:
+                    # No running loop, can run directly
+                    delegation_result = call_tool_agent(tool_input)
                 
             else:
                 # Unknown agent type
@@ -573,6 +592,11 @@ How can I assist you today?"""
             user_message = input_data.get('message', '') or input_data.get('input', '')
         else:
             user_message = input_data
+        
+        # Extract token
+        token = input_data.get('token', '') if isinstance(input_data, dict) else ''
+        if self.verbose:
+            logger.info(f"🔑 ManagerAgent received token: {token[:10] if token else 'None'}...")
         
         # Save user message to chat history
         self.chat_history.add_user_message(user_message)
