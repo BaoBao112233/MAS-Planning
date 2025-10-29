@@ -11,11 +11,14 @@ from cachetools import TTLCache
 import requests
 import httpx
 import aiofiles
+import traceback
+from langfuse import Langfuse
 
 from template.agent.manager import ManagerAgent
 
 # Session cache to store plan options for plan selection
 session_cache = TTLCache(maxsize=1000, ttl=3600)  # 1 hour TTL
+from template.agent.tool import ToolAgent
 from template.configs.environments import env
 from template.schemas.model import (
     ChatRequest, 
@@ -26,7 +29,6 @@ from template.schemas.model import (
     PlanOption,
     PlanSelectionRequest
 )
-from template.agent.prompts import CLASSIFICATION_PROMPT, DEFAULT_CLASSIFICATION_PROMPT, SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,13 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',  # format thời gian
 )
 logger = logging.getLogger(__name__)
+
+# Initialize Langfuse
+langfuse = Langfuse(
+    public_key=env.LANGFUSE_PUBLIC_KEY,
+    secret_key=env.LANGFUSE_SECRET_KEY,
+    host=env.LANGFUSE_HOST
+)
 
 # ElevenLabs configuration
 ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY
@@ -109,13 +118,18 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
     try:
         # Lấy prompt từ file JSON nếu có chatId
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
-        agent = ManagerAgent(
+        
+        agent = ToolAgent(
             temperature=0.2,
             model=env.MODEL_NAME,
             verbose=True,
-            session_id=request.sessionId,  # Pass session_id for chat history
-            conversation_id=request.conversationId
+            # session_id=request.sessionId,  # Pass session_id for chat history
+            # conversation_id=request.conversationId
         )
+
+        logger.info("🔄 Initializing ToolAgent MCP tools...")
+        await agent.init_async()
+        logger.info(f"✅ ToolAgent initialized with {len(agent.tools)} MCP tools")
 
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   
@@ -127,12 +141,12 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             context['cached_plan_options'] = cached_plans
         
         input_data = {
-            "message": request.message,
+            "input": request.message,
             "token": request.token
         }
         
-        # Manager Agent handles all routing internally
-        response = agent.invoke(input_data, context=context)
+                # Tool Agent handles all routing internally
+        response = await agent.ainvoke(input_data, token=request.token, context=context)
 
         # Store plan options in cache if response contains them
         if 'plan_options' in response:
@@ -177,7 +191,30 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             )
         
     except Exception as e:
-        logger.error(f"Error processing chat request: {str(e)}", exc_info=True)
+        error_msg = f"Error processing chat request: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        # Log to Langfuse
+        try:
+            span = langfuse.start_span(name="Chat Text API Error")
+            span.update(
+                input={
+                    "sessionId": request.sessionId,
+                    "conversationId": request.conversationId,
+                    "message": request.message[:100] + "..." if len(request.message) > 100 else request.message,
+                    "token": request.token[:10] + "..." if request.token else None
+                },
+                output={
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                },
+                metadata={
+                    "endpoint": "/ai/chat/text",
+                    "error_type": type(e).__name__
+                }
+            )
+            span.end()
+        except Exception as trace_e:
+            logger.error(f"Failed to send trace to Langfuse: {trace_e}")
         return ChatResponse(
             sessionId=request.sessionId,
             response="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
@@ -323,7 +360,6 @@ async def get_token(
     }
 
     response = requests.request("POST", url, headers=headers, data=payload).json()
-    
     if response['code'] == 200:
         return response['data']['token']
     else:

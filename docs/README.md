@@ -185,6 +185,24 @@ REDIS_PORT=6379
 - **🏥 Health Checks**: System và service monitoring
 - **📈 Usage Analytics**: User behavior và interaction patterns
 - **🚨 Error Tracking**: Comprehensive error logging và alerting
+- **🔍 Langfuse Tracing**: LLM application monitoring và debugging với detailed traces, metrics, và error analysis
+
+### Langfuse Integration
+
+MAS-Planning tích hợp Langfuse để trace và monitor LLM applications:
+
+1. **Setup Langfuse Account**: Đăng ký tại [langfuse.com](https://langfuse.com)
+2. **Configure Environment Variables**:
+
+   ```bash
+   LANGFUSE_PUBLIC_KEY=your-public-key
+   LANGFUSE_SECRET_KEY=your-secret-key
+   LANGFUSE_HOST=https://cloud.langfuse.com
+   LANGFUSE_PROJECT_NAME=MAS-Planning
+   ```
+
+3. **View Traces**: Access Langfuse dashboard để xem detailed traces của agent interactions, errors, và performance metrics
+4. **Debug Issues**: Use trace data để identify bottlenecks và improve system reliability
 
 ## 🤝 Contributing
 

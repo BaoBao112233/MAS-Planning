@@ -49,6 +49,11 @@ class EnvironmentSettings(BaseSettings):
     ELEVENLABS_VOICE_ID: str
     ELEVENLABS_STABILITY: float = 0.5
     ELEVENLABS_SIMILARITY_BOOST: float = 0.5
+    # Langfuse settings
+    LANGFUSE_PUBLIC_KEY: str
+    LANGFUSE_SECRET_KEY: str
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_PROJECT_NAME: str = "MAS-Planning"
     # Debug settings
     MCP_SERVER_URL: str
     MAX_TURNS: int = 20

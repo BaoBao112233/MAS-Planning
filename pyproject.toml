@@ -29,6 +29,8 @@ redis = "^6.4.0"
 termcolor = "^2.3.0"
 langchain-mcp-adapters="0.0.9"
 python-multipart="0.0.20"
+nest-asyncio="^1.5.8"
+
 
 
 

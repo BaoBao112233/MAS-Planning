@@ -8,7 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-/test_folder
+/test_folders
 /saved_prompt
 /.vscode
 /.conda
@@ -16,3 +16,4 @@ service-account.json
 */data
 \.pyc$|__pycache__/
 /logs
+/tmp

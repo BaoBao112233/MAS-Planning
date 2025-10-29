@@ -1,683 +1,515 @@
 """
 Tool Agent for MAS-Planning system using MCP tools
+Enhanced version: fully async with proper event loop handling
 """
 import logging
-import json
 import asyncio
-import re
-from typing import Dict, List, Any, Optional, TypedDict
-from langchain_core.runnables.graph import MermaidDrawMethod
+import json
+from typing import Dict, Any, TypedDict, List, Optional, Callable
+from termcolor import colored
 from langgraph.graph import StateGraph, END
-
-from template.message.message import HumanMessage, SystemMessage
-from template.configs.environments import env
 from langchain_google_vertexai import ChatVertexAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from template.agent.tool.prompt import TOOL_PROMPT, TOOL_PROMPTS
-from termcolor import colored
+from langchain_core.messages import AIMessage, HumanMessage as LCHumanMessage
+from template.configs.environments import env
+from template.message.message import HumanMessage, SystemMessage
+from template.message.converter import convert_messages_list
+from template.agent.tool.prompt import TOOL_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Define AgentState for ToolAgent
+
+# =======================
+#   Tool Agent State
+# =======================
 class ToolState(TypedDict):
     input: str
     token: str
-    route: str
+    messages: List[Any]
+    tool_calls: List[Dict[str, Any]]
+    tool_results: List[Dict[str, Any]]
     output: str
-    tool_data: Dict[str, Any]
     error: str
+    iteration: int
+    max_iterations: int
 
-class ToolAgent:
-    """Tool Agent sử dụng MCP server để thực hiện smart home automation tasks"""
+
+# =======================
+#   Async Graph Executor
+# =======================
+class AsyncGraphExecutor:
+    """Helper class to execute async graph nodes properly"""
     
-    def __init__(self, model: str = "gemini-2.5-pro", temperature: float = 0.2, verbose: bool = False):
-        self.name = 'Tool Agent'
+    def __init__(self, agent):
+        self.agent = agent
+    
+    def reason_node(self, state: ToolState) -> ToolState:
+        """Synchronous node that executes async reasoning"""
+        try:
+            loop = asyncio.get_running_loop()
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self.agent.reason_and_plan(state))
+        except RuntimeError:
+            return asyncio.run(self.agent.reason_and_plan(state))
+    
+    def execute_node(self, state: ToolState) -> ToolState:
+        """Synchronous node that executes async tool execution"""
+        try:
+            loop = asyncio.get_running_loop()
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self.agent.execute_tools_parallel(state))
+        except RuntimeError:
+            return asyncio.run(self.agent.execute_tools_parallel(state))
+
+
+# =======================
+#   Tool Agent Class
+# =======================
+class ToolAgent:
+    """Tool Agent sử dụng MCP để thực hiện smart home automation tasks với reasoning tự động"""
+
+    def __init__(self, model="gemini-2.5-pro", temperature=0.2, verbose=False, max_iterations=5):
+        self.name = "Tool Agent"
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
+        self.max_iterations = max_iterations
         self.tools = []
+        self.tools_dict = {}  # Map tool names to tool objects
         self.llm = None
-        self.graph = self.create_graph()
-        
-        if self.verbose:
-            logger.info(f"✅ {self.name} initialized")
-    
+        self.mcp_client = None
+        self._graph = None
+        self._executor = AsyncGraphExecutor(self)
+
+    # ==========================================================
+    # Init MCP tools + Vertex LLM
+    # ==========================================================
     async def init_async(self):
-        self.tools = await self.get_mcp_tools()
+        """Load MCP tools and initialize Vertex LLM with persistent client"""
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+        except ImportError:
+            logger.warning("nest_asyncio not installed. May have issues in nested event loops.")
+        
+        self.mcp_client = MultiServerMCPClient(
+            {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
+        )
+        await self.mcp_client.__aenter__()
+        
+        # Get tools (these are already LangChain tools)
+        self.tools = list(self.mcp_client.get_tools())
+        
+        # Create tool lookup dictionary
+        self.tools_dict = {tool.name: tool for tool in self.tools}
+        
         base_llm = ChatVertexAI(
             model_name=self.model,
             temperature=self.temperature,
             project=env.GOOGLE_CLOUD_PROJECT,
-            location=env.GOOGLE_CLOUD_LOCATION
+            location=env.GOOGLE_CLOUD_LOCATION,
         )
         
-        # Bind tools to LLM for proper tool calling
         if self.tools:
             self.llm = base_llm.bind_tools(self.tools)
         else:
             self.llm = base_llm
-        
+
         if self.verbose:
             logger.info(f"🔧 Loaded {len(self.tools)} MCP tools")
-            logger.info(f"🤖 LLM initialized with tools: {len(self.tools) > 0}")
-    
-    async def get_mcp_tools(self):
-        """Get tools from MCP server like PlanAgent"""
-        try:
-            # Add timeout for MCP connection
-            async with asyncio.timeout(5):  # 5 second timeout
-                async with MultiServerMCPClient({
-                    "mcp-server": {
-                        "url": env.MCP_SERVER_URL,
-                        "transport": "sse",
-                    }
-                }) as client:
-                    tools = list(client.get_tools())
-                    return tools
-        except asyncio.TimeoutError:
-            logger.error(f"❌ MCP connection timeout after 5 seconds")
-            return []
-        except Exception as e:
-            logger.error(f"❌ MCP connection failed: {str(e)}")
-            return []
-    
-    def detect_placeholder_tokens(self, text: str) -> List[str]:
-        """Detect placeholder tokens in text like 'your_auth_token', 'your_token', etc."""
-        # Pattern to match common placeholder tokens
-        patterns = [
-            r"token\s*=\s*['\"]your_auth_token['\"]",
-            r"token\s*=\s*['\"]your_token['\"]", 
-            r"token\s*=\s*['\"]auth_token['\"]",
-            r"token\s*=\s*['\"][^'\"]*token[^'\"]*['\"]"
-        ]
-        
-        found_tokens = []
-        for pattern in patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            found_tokens.extend(matches)
-        
-        return found_tokens
-    
-    def replace_placeholder_tokens(self, text: str, real_token: str) -> str:
-        """Replace placeholder tokens in text with real token"""
-        if not real_token:
-            return text
-        
-        # Patterns to replace
-        patterns = [
-            (r"token\s*=\s*['\"]your_auth_token['\"]", f"token='{real_token}'"),
-            (r"token\s*=\s*['\"]your_token['\"]", f"token='{real_token}'"),
-            (r"token\s*=\s*['\"]auth_token['\"]", f"token='{real_token}'"),
-        ]
-        
-        result = text
-        for pattern, replacement in patterns:
-            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
-        
-        return result
-    
-    def router(self, state: ToolState):
-        """Route input to appropriate action"""
-        input_value = state.get('input', '') or ''
-        input_text = input_value.lower() if input_value else ''
-        
+            for t in self.tools:
+                logger.info(f"🔹 {t.name} - {getattr(t, 'description', '')}")
+
+    async def cleanup(self):
+        """Cleanup MCP client connection"""
+        if self.mcp_client:
+            await self.mcp_client.__aexit__(None, None, None)
+
+    # ==========================================================
+    # Core Async Logic
+    # ==========================================================
+    async def reason_and_plan(self, state: ToolState) -> ToolState:
+        """LLM reasoning: phân tích input và quyết định tool calls"""
         if self.verbose:
-            logger.info(f"🔍 Routing input: {input_text}")
-        
-        # Determine route based on input content
-        # Priority: Check for device-related requests first
-        if any(keyword in input_text for keyword in ['device', 'room', 'living room', 'bedroom', 'kitchen', 'switch', 'control', 'turn on', 'turn off', 'air conditioner']):
-            route = 'execute_tool'
-        elif any(keyword in input_text for keyword in ['list tools', 'available tools', 'show tools', 'what tools']) and 'device' not in input_text:
-            route = 'list_tools'
-        elif any(keyword in input_text for keyword in ['search', 'find']):
-            route = 'search_tools'
-        elif any(keyword in input_text for keyword in ['info', 'detail', 'describe']):
-            route = 'get_tool_info'
-        elif any(keyword in input_text for keyword in ['help', 'how']):
-            route = 'help_with_tool'
-        else:
-            # Default to execute_tool for any device control task
-            route = 'execute_tool'
-        
-        if self.verbose:
-            logger.info(f"📍 Routed to: {route}")
-        
-        return {**state, 'route': route}
-    
-    def list_tools(self, state: ToolState):
-        """List all available MCP tools"""
-        if not self.tools:
-            output = "❌ No MCP tools available. Please check MCP server connection."
-        else:
-            output = f"📋 Available MCP Tools ({len(self.tools)}):\n\n"
-            for i, tool in enumerate(self.tools, 1):
-                tool_name = getattr(tool, 'name', 'Unknown Tool')
-                tool_desc = getattr(tool, 'description', 'No description available')
-                output += f"{i}. **{tool_name}**\n   {tool_desc}\n\n"
-        
-        return {**state, 'output': output}
-    
-    def search_tools(self, state: ToolState):
-        """Search tools by keyword"""
-        query = state.get('input', '')
-        search_keywords = self.extract_search_keywords(query)
-        
-        if not search_keywords:
-            output = "❌ Please provide keywords to search for tools."
-            return {**state, 'output': output}
-        
-        matching_tools = []
-        for tool in self.tools:
-            tool_name = getattr(tool, 'name', '')
-            tool_desc = getattr(tool, 'description', '')
-            
-            for keyword in search_keywords:
-                if (keyword.lower() in tool_name.lower() or 
-                    keyword.lower() in tool_desc.lower()):
-                    matching_tools.append({
-                        'tool': tool,
-                        'match_reason': 'name' if keyword.lower() in tool_name.lower() else 'description'
-                    })
-                    break
-        
-        if not matching_tools:
-            output = f"❌ No tools found matching: {', '.join(search_keywords)}"
-        else:
-            output = f"🔍 Found {len(matching_tools)} tools matching '{', '.join(search_keywords)}':\n\n"
-            for match in matching_tools:
-                tool = match['tool']
-                tool_name = getattr(tool, 'name', 'Unknown')
-                tool_desc = getattr(tool, 'description', 'No description')
-                match_reason = match['match_reason']
-                output += f"• **{tool_name}** (matched by {match_reason})\n  {tool_desc}\n\n"
-        
-        return {**state, 'output': output}
-    
-    def get_tool_info(self, state: ToolState):
-        """Get detailed information about a specific tool"""
-        query = state.get('input', '')
-        tool_name = self.extract_tool_name(query)
-        
-        if not tool_name:
-            output = "❌ Please specify which tool you want information about."
-            return {**state, 'output': output}
-        
-        # Find the tool
-        target_tool = None
-        for tool in self.tools:
-            if getattr(tool, 'name', '').lower() == tool_name.lower():
-                target_tool = tool
-                break
-        
-        if not target_tool:
-            output = f"❌ Tool '{tool_name}' not found."
-            return {**state, 'output': output}
-        
-        # Format tool information
-        tool_name = getattr(target_tool, 'name', 'Unknown')
-        tool_desc = getattr(target_tool, 'description', 'No description available')
-        
-        output = f"🔧 **{tool_name}**\n\n"
-        output += f"**Description:** {tool_desc}\n\n"
-        
-        # Add parameter information if available
-        input_schema = getattr(target_tool, 'inputSchema', {})
-        if input_schema:
-            properties = input_schema.get('properties', {})
-            required = input_schema.get('required', [])
-            
-            if properties:
-                output += "**Parameters:**\n"
-                for param_name, param_info in properties.items():
-                    param_type = param_info.get('type', 'unknown')
-                    param_desc = param_info.get('description', 'No description')
-                    required_text = " (required)" if param_name in required else ""
-                    output += f"  • `{param_name}` ({param_type}){required_text}: {param_desc}\n"
-        
-        return {**state, 'output': output}
-    
-    def execute_tool(self, state: ToolState):
-        """Execute tool using LLM with MCP tools"""
-        query = state.get('input', '')
-        token = state.get('token', '')
-        
-        if self.verbose:
-            logger.info(f"🚀 Executing tool with query: {query}")
-            logger.info(f"🔑 Using token: {token[:10]}..." if token else "🔑 No token provided")
-            logger.info(f"🔧 Available tools: {len(self.tools)}")
-            logger.info(f"🤖 LLM initialized: {self.llm is not None}")
-        
-        if not self.llm:
-            output = "❌ LLM not initialized. Please call init_async() first."
-            return {**state, 'output': output, 'error': 'LLM not initialized'}
-        
-        if not self.tools:
-            output = "❌ No MCP tools available. Please check MCP server connection."
-            return {**state, 'output': output, 'error': 'No MCP tools'}
+            logger.info(f"\n{'='*50}\n🧠 REASONING PHASE (Iteration {state['iteration']})\n{'='*50}")
         
         try:
-            # Step 1: Detect placeholder tokens in query
-            placeholder_tokens = self.detect_placeholder_tokens(query)
-            if placeholder_tokens and self.verbose:
-                logger.info(f"🔍 Detected placeholder tokens: {placeholder_tokens}")
+            messages = state.get("messages", [])
+            if not messages:
+                system_msg = SystemMessage(content=TOOL_PROMPT)
+                # ✅ Inject token context into user message
+                token_info = ""
+                if state.get("token"):
+                    token_info = f"[SYSTEM] Authentication token is available in the system context.\n\n"
+                user_msg = HumanMessage(content=f"{token_info}User request: {state['input']}")
+                messages = [system_msg, user_msg]
             
-            # Step 2: If placeholders detected or some MCP tools require a token,
-            # require the client to provide the token explicitly (no phone/password auto-login).
-            # This enforces the policy: token must come from the client request.
-            need_token = False
-            try:
-                for tool in self.tools:
-                    input_schema = getattr(tool, 'inputSchema', {}) or {}
-                    properties = input_schema.get('properties', {})
-                    if 'token' in properties:
-                        need_token = True
-                        break
-            except Exception:
-                # If tools schema inspection fails, be conservative and don't force-request here
-                need_token = False
-
-            if (placeholder_tokens or need_token) and not token:
-                # Request token from client — do NOT attempt phone/password login here
-                output = (
-                    "❗ Authentication token required from client to execute MCP tools.\n"
-                    "Please include the token in your request (e.g. add a `token` field in the JSON body)\n"
-                    "Example: { \"input\": \"turn off all devices in room X\", \"token\": \"<YOUR_OXII_TOKEN>\" }\n\n"
-                    "Note: For security we do NOT perform login via phone/password automatically."
-                )
-                return {**state, 'output': output, 'error': 'missing_token'}
-            
-            # Step 3: Replace placeholder tokens with provided client token (if any)
-            processed_query = query
-            if placeholder_tokens and token:
-                processed_query = self.replace_placeholder_tokens(query, token)
-                if processed_query != query and self.verbose:
-                    logger.info(f"🔄 Token replacement applied")
-                    logger.info(f"Original: {query[:100]}...")
-                    logger.info(f"Processed: {processed_query[:100]}...")
-            
-            # Build system prompt with token information
-            system_prompt = TOOL_PROMPT
-            if token:
-                system_prompt += f"""
-
-🔐 AUTHENTICATION TOKEN PROVIDED:
-Your authentication token is: {token}
-
-MANDATORY: Include this exact token in EVERY MCP tool call using the 'token' parameter.
-Example tool calls:
-- get_device_list(token="{token}")
-- switch_device_control(token="{token}", buttonId=123, action="on")
-- control_air_conditioner(token="{token}", power="on", mode="cool", temp="24")
-
-NEVER make tool calls without the token parameter - they will fail with authentication errors."""
-            
-            messages = [
-                SystemMessage(system_prompt),
-                HumanMessage(processed_query)  # Use processed query with replaced tokens
-            ]
-            
-            # Convert to LangChain messages
-            from template.message.converter import convert_messages_list
-            lc_messages = convert_messages_list(messages)
-            
-            # Invoke LLM with tools
-            response = self.llm.invoke(lc_messages)
+            # Call LLM with tools
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                self.llm.invoke,
+                convert_messages_list(messages)
+            )
             
             if self.verbose:
-                logger.info(f"🔍 LLM response type: {type(response)}")
-                logger.info(f"🔍 LLM response: {response}")
-                if hasattr(response, 'content'):
-                    logger.info(f"🔍 LLM response content: '{response.content}'")
-                if hasattr(response, 'tool_calls'):
-                    logger.info(f"🔍 LLM tool calls: {response.tool_calls}")
+                logger.info(f"💭 LLM Response: {response.content[:200]}...")
+                if hasattr(response, 'tool_calls') and response.tool_calls:
+                    logger.info(f"🔧 Tool calls planned: {len(response.tool_calls)}")
+                    for tc in response.tool_calls:
+                        logger.info(f"   → {tc['name']}({tc['args']})")
             
-            # Handle tool calls if present
+            # Update state
+            messages.append(response)
+            state["messages"] = messages
+            
+            # Extract tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
-                # Process tool calls and get results
-                tool_results = []
-                for tool_call in response.tool_calls:
-                    try:
-                        # Execute the tool call through MCP
-                        tool_name = tool_call['name']
-                        tool_args = tool_call['args']
-                        
-                        if self.verbose:
-                            logger.info(f"🔧 Executing tool: {tool_name} with args: {tool_args}")
-                        
-                        # Find the tool in our MCP tools
-                        matching_tool = None
-                        for tool in self.tools:
-                            if tool.name == tool_name:
-                                matching_tool = tool
-                                break
-                        
-                        if matching_tool:
-                            # Execute tool directly 
-                            import asyncio
-                            import concurrent.futures
-                            
-                            async def call_tool_async():
-                                """Call the tool asynchronously with fresh MCP connection"""
-                                try:
-                                    # Get token from state
-                                    token = state.get('token', '')
-                                    if token:
-                                        tool_args['token'] = token
-                                        logger.info(f"🔑 Token injected into tool args: {token[:20]}...")
-                                    else:
-                                        logger.warning(f"⚠️ No token available to inject into tool args")
-                                    
-                                    logger.info(f"🔧 Calling tool {tool_name} with args: {tool_args}")
-                                    
-                                    # Create fresh MCP client connection for each tool call
-                                    async with MultiServerMCPClient({
-                                        "mcp-server": {
-                                            "url": env.MCP_SERVER_URL,
-                                            "transport": "sse",
-                                        }
-                                    }) as client:
-                                        # Get fresh tools from client
-                                        fresh_tools = list(client.get_tools())
-                                        
-                                        # Find matching tool in fresh tools
-                                        fresh_tool = None
-                                        for tool in fresh_tools:
-                                            if tool.name == tool_name:
-                                                fresh_tool = tool
-                                                break
-                                        
-                                        if not fresh_tool:
-                                            return f"Tool {tool_name} not found in fresh MCP connection"
-                                        
-                                        logger.info(f"🔧 Using fresh tool: {type(fresh_tool)}")
-                                        
-                                        # Call the fresh tool
-                                        result = await fresh_tool.ainvoke(tool_args)
-                                        logger.info(f"✅ Fresh tool call successful: {type(result)}")
-                                        logger.info(f"✅ Result preview: {str(result)[:200]}...")
-                                        return result
-                                        
-                                except Exception as e:
-                                    import traceback
-                                    error_details = traceback.format_exc()
-                                    error_msg = f"Tool call failed: {str(e)}\nDetails: {error_details}"
-                                    logger.error(f"❌ Tool call error: {error_msg}")
-                                    return error_msg
-                            
-                            def run_async_tool():
-                                """Run async tool in proper event loop"""
-                                try:
-                                    # Check if we're already in an event loop
-                                    try:
-                                        loop = asyncio.get_running_loop()
-                                        logger.info("🔄 Using existing event loop")
-                                        # Create a new task in the existing loop
-                                        import concurrent.futures
-                                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                                            future = executor.submit(asyncio.run, call_tool_async())
-                                            return future.result(timeout=30)
-                                    except RuntimeError:
-                                        # No running loop, create a new one
-                                        logger.info("🆕 Creating new event loop")
-                                        return asyncio.run(call_tool_async())
-                                except Exception as e:
-                                    import traceback
-                                    error_details = traceback.format_exc()
-                                    error_msg = f"Async execution failed: {str(e)}\nDetails: {error_details}"
-                                    logger.error(f"❌ Async execution error: {error_msg}")
-                                    return error_msg
-                            
-                            try:
-                                # Execute tool using the async wrapper
-                                result = run_async_tool()
-                                    
-                                if self.verbose:
-                                    logger.info(f"🔍 Tool result type: {type(result)}")
-                                    logger.info(f"🔍 Tool result: {result}")
-                                    
-                                # Process result - handle different response formats
-                                if isinstance(result, str):
-                                    # Check for authentication errors
-                                    if any(phrase in result.lower() for phrase in [
-                                        "need a token", "token required", "authenticate", 
-                                        "authorization failed", "invalid token", "token expired"
-                                    ]):
-                                        auth_error_msg = (
-                                            "🔐 **Authentication Required**\n\n"
-                                            "The MCP tool requires a valid authentication token. "
-                                            "Please ensure you have provided a current OXII API token.\n\n"
-                                            f"Tool Response: {result}\n\n"
-                                            "💡 **Note**: If you believe you provided a valid token, "
-                                            "it may have expired. Please obtain a fresh token from the OXII system."
-                                        )
-                                        tool_results.append(f"**{tool_name}**: {auth_error_msg}")
-                                    elif result.startswith("Tool call failed:"):
-                                        tool_results.append(f"**{tool_name}**: {result}")
-                                    else:
-                                        # Try to parse as JSON for prettier display
-                                        try:
-                                            import json
-                                            parsed = json.loads(result)
-                                            if isinstance(parsed, list) and len(parsed) > 0:
-                                                # Format device list nicely
-                                                devices_info = []
-                                                for room in parsed:
-                                                    room_name = room.get('room_name', 'Unknown Room')
-                                                    devices = room.get('devices', [])
-                                                    buttons = room.get('buttons', [])
-                                                    
-                                                    devices_info.append(f"🏠 **{room_name}**:")
-                                                    for device in devices:
-                                                        devices_info.append(f"  📱 {device.get('name', 'Unknown Device')} ({device.get('device_status', 'Unknown Status')})")
-                                                    for button in buttons:
-                                                        devices_info.append(f"  🔘 {button.get('name', 'Unknown Button')} ({button.get('button_type', 'Unknown Type')}) - {button.get('status', 'Unknown Status')}")
-                                                
-                                                formatted_result = "\n".join(devices_info)
-                                                tool_results.append(f"**{tool_name}**: \n{formatted_result}")
-                                            else:
-                                                tool_results.append(f"**{tool_name}**: {json.dumps(parsed, indent=2, ensure_ascii=False)}")
-                                        except (json.JSONDecodeError, TypeError):
-                                            # Not JSON, display as-is
-                                            tool_results.append(f"**{tool_name}**: {result}")
-                                elif isinstance(result, dict):
-                                    if 'content' in result:
-                                        # Extract actual content
-                                        content = result['content']
-                                        if isinstance(content, list) and len(content) > 0:
-                                            # Handle array of content objects
-                                            if isinstance(content[0], dict) and 'text' in content[0]:
-                                                tool_results.append(f"**{tool_name}**: {content[0]['text']}")
-                                            else:
-                                                tool_results.append(f"**{tool_name}**: {str(content[0])}")
-                                        else:
-                                            tool_results.append(f"**{tool_name}**: {str(content)}")
-                                    else:
-                                        tool_results.append(f"**{tool_name}**: {str(result)}")
-                                else:
-                                    tool_results.append(f"**{tool_name}**: {str(result)}")
-                                    
-                            except Exception as e:
-                                tool_results.append(f"**{tool_name}**: Tool execution failed: {str(e)}")
-                                if self.verbose:
-                                    logger.error(f"❌ Tool execution error: {e}")
-                            
-                            if self.verbose:
-                                logger.info(f"✅ Tool {tool_name} executed directly")
-                        else:
-                            tool_results.append(f"**{tool_name}**: Tool not found")
-                            if self.verbose:
-                                logger.warning(f"⚠️ Tool {tool_name} not found in available tools")
-                                
-                    except Exception as e:
-                        tool_results.append(f"**{tool_call['name']}**: Error - {str(e)}")
-                        if self.verbose:
-                            logger.error(f"❌ Tool execution failed: {str(e)}")
-                
-                # Combine results
-                if tool_results:
-                    output = f"🔧 **Tool Execution Result:**\n\n" + "\n\n".join(tool_results)
-                else:
-                    output = f"🔧 **Tool Execution Result:**\n\nNo tool results available"
+                state["tool_calls"] = response.tool_calls
             else:
-                # No tool calls, use response content
-                output = f"🔧 **Tool Execution Result:**\n\n{response.content}"
+                # No more tool calls, finish
+                state["output"] = response.content
+                state["tool_calls"] = []
             
-            if self.verbose:
-                logger.info(f"✅ Tool execution completed successfully")
-                logger.info(f"📝 Response length: {len(response.content)}")
-            
-            return {**state, 'output': output}
+            return state
             
         except Exception as e:
-            error_msg = f"Tool execution failed: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            logger.error(f"❌ Reasoning error: {e}", exc_info=True)
+            state["error"] = str(e)
+            state["tool_calls"] = []
+            return state
 
-            output = f"🧪 **Mock Tool Execution** (LLM unavailable):\n\n"
-            output += f"Task: {query}\n"
-            output += f"Status: ✅ Simulated execution completed\n"
-            output += f"Result: Mock response for development purposes\n"
-            output += f"Note: {error_msg}"
-            
-            return {**state, 'output': output, 'error': error_msg}
-    
-    def help_with_tool(self, state: ToolState):
-        """Provide help and guidance for tool usage"""
-        output = """🆘 **Tool Agent Help**
-        
-        Available commands:
-        • Natural language device control (e.g., "turn on living room lights")
-        • Room control (e.g., "turn off all devices in bedroom")
-        • AC control (e.g., "set air conditioner to 22 degrees")
-        • Device status (e.g., "get list of all devices")
-
-        Examples:
-        • "turn on light 1"
-        • "set AC to cool mode 24 degrees"
-        • "turn off all devices in living room"
-        • "get device status"
-
-        The system will automatically select and execute the appropriate MCP tools based on your request.
-        """
-        return {**state, 'output': output}
-    
-    def extract_search_keywords(self, query: str) -> List[str]:
-        """Extract search keywords from query"""
-        keywords = []
-        query_lower = query.lower()
-        
-        # Remove common words
-        stop_words = {'search', 'for', 'find', 'tool', 'tools', 'the', 'a', 'an', 'with', 'that', 'can'}
-        words = query_lower.split()
-        
-        for word in words:
-            if word not in stop_words and len(word) > 2:
-                keywords.append(word)
-        
-        return keywords
-    
-    def extract_tool_name(self, query: str) -> str:
-        """Extract tool name from query"""
-        query_lower = query.lower()
-        
-        # Check available tools
-        for tool in self.tools:
-            tool_name = getattr(tool, 'name', '')
-            if tool_name.lower() in query_lower:
-                return tool_name
-        
-        return ""
-    
-    def controller(self, state: ToolState):
-        """Controller for graph routing"""
-        return state.get('route', 'execute_tool')
-    
-    def create_graph(self):
-        """Create execution graph for ToolAgent"""
-        workflow = StateGraph(ToolState)
-        
-        # Add nodes
-        workflow.add_node('router', self.router)
-        workflow.add_node('list_tools', self.list_tools)
-        workflow.add_node('search_tools', self.search_tools)
-        workflow.add_node('get_tool_info', self.get_tool_info)
-        workflow.add_node('execute_tool', self.execute_tool)
-        workflow.add_node('help_with_tool', self.help_with_tool)
-        
-        # Set entry point
-        workflow.set_entry_point('router')
-        
-        # Add conditional edges
-        workflow.add_conditional_edges('router', self.controller)
-        
-        # All nodes end
-        workflow.add_edge('list_tools', END)
-        workflow.add_edge('search_tools', END)
-        workflow.add_edge('get_tool_info', END)
-        workflow.add_edge('execute_tool', END)
-        workflow.add_edge('help_with_tool', END)
-        
-        return workflow.compile(debug=self.verbose)
-    
-    def invoke(self, input_data, **kwargs) -> Dict[str, Any]:
-        """Execute tool agent with input query"""
+    async def execute_tools_parallel(self, state: ToolState) -> ToolState:
+        """Execute multiple tool calls with smart parallel/sequential logic"""
         if self.verbose:
-            logger.info(colored(f'Entering: {self.name}', 'cyan'))
-            logger.info(colored(f'Query: {input_data}', 'cyan'))
+            logger.info(f"\n{'='*50}\n⚙️ EXECUTION PHASE\n{'='*50}")
         
-        # Extract token from kwargs or input_data
-        token = kwargs.get('token', '')
+        tool_calls = state.get("tool_calls", [])
+        if not tool_calls:
+            return state
         
-        # Handle different input types
-        if isinstance(input_data, str):
-            input_text = input_data
-        elif isinstance(input_data, dict):
-            input_text = input_data.get('input', input_data.get('message', ''))
-            token = input_data.get('token', token)  # Prefer token from input_data if available
-        else:
-            input_text = str(input_data)
+        independent_calls, dependent_calls = self._categorize_tool_calls(tool_calls)
+        results = []
         
-        state = {
-            'input': input_text,
-            'token': token,
-            'route': '',
-            'tool_data': {},
-            'error': '',
-            'output': ''
+        # PHASE 1: Execute independent tools in parallel
+        if independent_calls:
+            if self.verbose:
+                logger.info(f"🚀 Phase 1: Executing {len(independent_calls)} independent tools in parallel")
+                for tc in independent_calls:
+                    logger.info(f"   → {tc['name']}")
+            
+            parallel_results = await asyncio.gather(
+                *[self._execute_single_tool(tc, state["token"]) for tc in independent_calls],
+                return_exceptions=True
+            )
+            results.extend(parallel_results)
+        
+        # PHASE 2: Execute dependent tools
+        if dependent_calls:
+            prerequisite_tools = {"get_device_list", "retrieve_ir_data_v2", "retrieve_ir_data"}
+            prereqs = [tc for tc in dependent_calls if tc["name"] in prerequisite_tools]
+            controls = [tc for tc in dependent_calls if tc["name"] not in prerequisite_tools]
+            
+            if prereqs:
+                if self.verbose:
+                    logger.info(f"📋 Phase 2a: Executing {len(prereqs)} prerequisite tool(s) sequentially")
+                for tc in prereqs:
+                    if self.verbose:
+                        logger.info(f"   → {tc['name']}")
+                    result = await self._execute_single_tool(tc, state["token"])
+                    results.append(result)
+            
+            if controls:
+                if len(controls) == 1:
+                    if self.verbose:
+                        logger.info(f"⚙️ Phase 2b: Executing 1 control tool")
+                        logger.info(f"   → {controls[0]['name']}")
+                    result = await self._execute_single_tool(controls[0], state["token"])
+                    results.append(result)
+                else:
+                    if self.verbose:
+                        logger.info(f"⚡ Phase 2b: Executing {len(controls)} control tools in parallel")
+                        for tc in controls:
+                            logger.info(f"   → {tc['name']}")
+                    
+                    parallel_controls = await asyncio.gather(
+                        *[self._execute_single_tool(tc, state["token"]) for tc in controls],
+                        return_exceptions=True
+                    )
+                    results.extend(parallel_controls)
+        
+        # ✅ Add tool results as HumanMessage
+        messages = state["messages"]
+        tool_results_summary = []
+        
+        for result in results:
+            if isinstance(result, dict):
+                tool_name = result.get("tool_name", "unknown")
+                content = result.get("content", {})
+                success = result.get("success", False)
+                
+                if success:
+                    # Format nicely for LLM
+                    if isinstance(content, str):
+                        tool_results_summary.append(f"✅ Tool '{tool_name}': {content}")
+                    else:
+                        tool_results_summary.append(f"✅ Tool '{tool_name}': {json.dumps(content, indent=2)}")
+                else:
+                    error_msg = content.get('error', 'Unknown error') if isinstance(content, dict) else str(content)
+                    tool_results_summary.append(f"❌ Tool '{tool_name}' failed: {error_msg}")
+            elif isinstance(result, Exception):
+                logger.error(f"Tool execution exception: {result}")
+                tool_results_summary.append(f"❌ Tool execution failed with exception: {str(result)}")
+        
+        # Add results as a single HumanMessage
+        if tool_results_summary:
+            results_text = "\n".join(tool_results_summary)
+            messages.append(LCHumanMessage(content=f"[TOOL EXECUTION RESULTS]\n{results_text}"))
+        
+        state["messages"] = messages
+        state["tool_results"] = results
+        state["tool_calls"] = []
+        state["iteration"] += 1
+        
+        if self.verbose:
+            logger.info(f"✅ Execution complete. Total results: {len(results)}")
+        
+        return state
+
+    def _categorize_tool_calls(self, tool_calls: List[Dict]) -> tuple:
+        """Phân loại tool calls: độc lập vs phụ thuộc based on 13 OXII tools"""
+        independent = []
+        dependent = []
+        
+        prerequisite_tools = {
+            "get_device_list",
+            "retrieve_ir_data_v2", 
+            "retrieve_ir_data"
         }
         
+        dependent_tools = {
+            "switch_on_off_controls_v2",
+            "ac_controls_mesh_v2",
+            "ac_controls_mesh",
+            "open_ir_send_for_testing_mesh_v2",
+            "open_ir_send_for_testing_mesh",
+            "cronjob_device_v2",
+            "cronjob_device",
+            "room_one_touch_control"
+        }
+        
+        independent_tools = {
+            "switch_on_off_all_device",
+            "switch_device_by_type"
+        }
+        
+        has_prerequisite = any(tc["name"] in prerequisite_tools for tc in tool_calls)
+        
+        for tc in tool_calls:
+            tool_name = tc["name"]
+            
+            if tool_name in prerequisite_tools:
+                dependent.insert(0, tc)
+            elif tool_name in independent_tools:
+                independent.append(tc)
+            elif tool_name in dependent_tools:
+                if has_prerequisite:
+                    dependent.append(tc)
+                else:
+                    independent.append(tc)
+            else:
+                dependent.append(tc)
+        
+        return independent, dependent
+
+    async def _execute_single_tool(self, tool_call: Dict, token: str) -> Dict:
+        """Execute a single tool call using fresh MCP client per call"""
+        temp_client = None
         try:
-            result = self.graph.invoke(state)
-            output = result.get('output', '')
-            route = result.get('route', '')
-            error = result.get('error', '')
+            tool_name = tool_call["name"]
+            tool_args = tool_call.get("args", {})
+            tool_id = tool_call.get("id", "")
+            
+            # ✅ Inject token into args
+            tool_args["token"] = token
             
             if self.verbose:
-                logger.info(f'Route: {route}')
-                logger.info(f'Output: {output}')
+                logger.info(f"🔧 Calling {tool_name} with args: {tool_args}")
+            
+            # ✅ FIX: Create fresh MCP client for each tool call
+            # This avoids SSE connection deadlock in nested async contexts
+            logger.info(f"⏳ Creating fresh MCP client for {tool_name}...")
+            
+            temp_client = MultiServerMCPClient(
+                {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
+            )
+            
+            # Enter context and get tools
+            await temp_client.__aenter__()
+            temp_tools = list(temp_client.get_tools())
+            temp_tools_dict = {t.name: t for t in temp_tools}
+            
+            # Get the tool
+            tool = temp_tools_dict.get(tool_name)
+            if not tool:
+                raise ValueError(f"Tool '{tool_name}' not found in available tools")
+            
+            # Call tool with timeout
+            logger.info(f"⏳ Invoking {tool_name}...")
+            result = await asyncio.wait_for(
+                tool.ainvoke(tool_args),
+                timeout=60.0  # 60 seconds timeout
+            )
+            
+            if self.verbose:
+                logger.info(f"✅ {tool_name} completed: {str(result)[:200]}...")
             
             return {
-                'route': route,
-                'output': output,
-                'available_tools': len(self.tools),
-                'tool_agent_result': True,
-                'error': error
+                "tool_call_id": tool_id,
+                "tool_name": tool_name,
+                "content": result,
+                "success": True
             }
-        
-        except Exception as e:
-            error_msg = f"Error in ToolAgent execution: {str(e)}"
-            logger.error(error_msg)
+            
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ Tool '{tool_name}' timed out after 60s")
             return {
-                'route': 'error',
-                'output': f"❌ {error_msg}",
-                'available_tools': len(self.tools),
-                'tool_agent_result': False,
-                'error': str(e)
+                "tool_call_id": tool_call.get("id", ""),
+                "tool_name": tool_call.get("name", "unknown"),
+                "content": {"error": "Tool execution timed out after 60 seconds"},
+                "success": False
             }
-    
-    def stream(self, input_data):
-        """Streaming interface (placeholder)"""
-        return self.invoke(input_data)
+            
+        except Exception as e:
+            logger.error(f"❌ Tool execution error ({tool_call.get('name', 'unknown')}): {e}", exc_info=True)
+            return {
+                "tool_call_id": tool_call.get("id", ""),
+                "tool_name": tool_call.get("name", "unknown"),
+                "content": {"error": str(e)},
+                "success": False
+            }
+            
+        finally:
+            # Always cleanup temp client
+            if temp_client:
+                try:
+                    await temp_client.__aexit__(None, None, None)
+                    logger.info(f"🧹 Cleaned up MCP client for {tool_call.get('name', 'unknown')}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Error cleaning up MCP client: {cleanup_error}")
 
-# Export the ToolAgent
+    # ==========================================================
+    # Router Logic
+    # ==========================================================
+    def should_continue(self, state: ToolState) -> str:
+        """Decide whether to continue reasoning or finish"""
+        if state["iteration"] >= state["max_iterations"]:
+            if self.verbose:
+                logger.info("🛑 Max iterations reached")
+            return "finish"
+        
+        if state.get("tool_calls"):
+            return "execute"
+        
+        if state.get("output"):
+            return "finish"
+        
+        if state.get("error"):
+            return "finish"
+        
+        if state.get("tool_results"):
+            return "reason"
+        
+        return "finish"
+
+    # ==========================================================
+    # Graph Construction
+    # ==========================================================
+    def create_graph(self):
+        """Create LangGraph workflow"""
+        g = StateGraph(ToolState)
+        
+        g.add_node("reason", self._executor.reason_node)
+        g.add_node("execute", self._executor.execute_node)
+        
+        g.set_entry_point("reason")
+        
+        g.add_conditional_edges(
+            "reason",
+            self.should_continue,
+            {
+                "execute": "execute",
+                "finish": END,
+            }
+        )
+        
+        g.add_conditional_edges(
+            "execute",
+            self.should_continue,
+            {
+                "reason": "reason",
+                "finish": END,
+            }
+        )
+        
+        return g.compile(debug=self.verbose)
+
+    @property
+    def graph(self):
+        """Lazy load graph"""
+        if self._graph is None:
+            self._graph = self.create_graph()
+        return self._graph
+
+    # ==========================================================
+    # Public Interface
+    # ==========================================================
+    async def ainvoke(self, input_data, **kwargs):
+        """Async entry point for agent invocation"""
+        token = kwargs.get("token", "")
+        query = input_data["input"] if isinstance(input_data, dict) else input_data
+        
+        initial_state: ToolState = {
+            "input": query,
+            "token": token,
+            "messages": [],
+            "tool_calls": [],
+            "tool_results": [],
+            "output": "",
+            "error": "",
+            "iteration": 0,
+            "max_iterations": self.max_iterations,
+        }
+        
+        if self.verbose:
+            logger.info(f"\n{'='*60}\n🎯 NEW REQUEST: {query}\n{'='*60}")
+        
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            self.graph.invoke,
+            initial_state
+        )
+        
+        if self.verbose:
+            logger.info(f"\n{'='*60}\n✨ FINAL OUTPUT:\n{result.get('output', 'No output')}\n{'='*60}\n")
+        
+        return result
+
+    def invoke(self, input_data, **kwargs):
+        """Sync entry point (for backward compatibility)"""
+        try:
+            loop = asyncio.get_running_loop()
+            raise RuntimeError(
+                "invoke() called from async context. Use 'await agent.ainvoke()' instead."
+            )
+        except RuntimeError as e:
+            if "no running event loop" in str(e).lower():
+                return asyncio.run(self.ainvoke(input_data, **kwargs))
+            else:
+                raise
+
+
 __all__ = ["ToolAgent"]

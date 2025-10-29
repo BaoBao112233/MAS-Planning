@@ -43,8 +43,6 @@ dexscreener>=1.2
 psycopg2-binary==2.9.10
 redis>=6.4.0
 
-# Development tools (optional)
-pytest>=7.0.0
-black>=23.0.0
-flake8>=6.0.0
+# Langfuse for tracing and monitoring
+langfuse>=2.0.0
 termcolor>=2.3.0
