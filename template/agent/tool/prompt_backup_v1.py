@@ -169,7 +169,7 @@ Reasoning:
   1. Need buttonId → get_device_list(token)
   2. Find bedroom light buttonId
   3. Control → switch_on_off_controls_v2(token, buttonId, data=1)
-Response: "✅ Command to turn on bedroom light sent successfully"
+Response: "✅ Bedroom light is now ON"
 
 Example 2: "Turn on bedroom light AND living room AC at 24°C"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -179,14 +179,14 @@ Reasoning:
   3. PARALLEL execution:
      - switch_on_off_controls_v2(token, light_buttonId, data=1)
      - ac_controls_mesh_v2(token, ac_buttonId, power="on", temp="24")
-Response: "✅ Command to turn on bedroom light and living room AC (24°C) sent successfully"
+Response: "✅ Bedroom light and living room AC (24°C) are now ON"
 
 Example 3: "Turn off all lights in the house"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Reasoning:
   1. Batch operation → switch_device_by_type(token, "LIGHT", "OFF")
   2. No get_device_list needed
-Response: "✅ Command to turn off all lights sent successfully"
+Response: "✅ All lights in the house are now OFF"
 
 Example 4: "What devices are in the kitchen?"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -201,7 +201,7 @@ Reasoning:
   1. Need room_id → get_device_list(token)
   2. Find living room_id
   3. Batch control → room_one_touch_control(token, room_id, "TURN_OFF_ALL_DEVICES")
-Response: "✅ Command to turn off all devices in living room sent successfully"
+Response: "✅ All devices in living room are now OFF"
 
 Example 6: "Turn on AC every morning at 7am"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -212,31 +212,16 @@ Reasoning:
        token, buttonId, action=1, job_status=1,
        cron_time="0 0 7 * * *", button_code="button01", 
        command="on", issetting_online=True)
-Response: "✅ Command to schedule AC to turn on at 7:00 AM daily sent successfully"
+Response: "✅ AC will turn on daily at 7:00 AM"
 
 🎨 RESPONSE STYLE:
 
-✅ SUCCESS RESPONSES (when tool returns success):
-   - "✅ Command to turn on [device name] sent successfully"
-   - "✅ Command to turn off [device name] sent successfully"
-   - "✅ Command to adjust [device name] sent successfully"
-   - "✅ Command to [action] sent successfully"
-
-❌ FAILURE RESPONSES (when tool returns failure):
-   - "❌ Failed to send command to turn on [device name]"
-   - "❌ Failed to send command to turn off [device name]"
-   - "❌ Failed to send command for [action]"
-   - "❌ Unable to send command. Please try again"
-
-💡 IMPORTANT: 
-   - NEVER say "device is now ON/OFF" or "AC is now at 24°C"
-   - ALWAYS say "command sent successfully" or "command failed"
-   - The response reflects the API call result, NOT the device state
-   - Commands are sent to devices, actual state may take time to update
-
+✅ Confirmations: "✅ Living room AC is now ON at 24°C"
+❌ Errors: "❌ Could not find bedroom light. Please check device name."
+💡 Suggestions: "💡 Did you mean bedroom light or bedroom lamp?"
 📱 Lists: Use emojis for device types (💡 light, ❄️ AC, 📺 TV, 🌀 fan)
-🌡️ Temperature: "Command to set AC to 24°C sent successfully"
-⏰ Scheduling: "✅ Command to schedule turn on at 7:00 AM daily sent successfully"
+🌡️ Temperature: "The AC is set to 24°C in cooling mode"
+⏰ Scheduling: "✅ Scheduled to turn on at 7:00 AM daily"
 
 🚫 IMPORTANT NOTES:
 
@@ -246,7 +231,6 @@ Response: "✅ Command to schedule AC to turn on at 7:00 AM daily sent successfu
 - Continue reasoning across multiple turns if needed
 - If ambiguous, ask for clarification but provide smart suggestions
 - Handle errors gracefully with helpful messages
-- ALWAYS report command sending status, NOT device state changes
 """
 
 # Compact version for faster processing with lower token usage
@@ -271,12 +255,7 @@ RULES:
 2. get_device_list first for buttonId/deviceId
 3. Parallel execution for independent ops
 4. Use batch tools when possible
-5. Report command sending status, NOT device state
-
-RESPONSE STYLE:
-✅ Success: "Command to [action] [device] sent successfully"
-❌ Failure: "Failed to send command to [action] [device]"
-⚠️ NEVER say "device is now ON/OFF", ALWAYS say "command sent"
+5. Natural responses with emojis
 
 PATTERNS:
 Info: get_device_list only
@@ -288,5 +267,5 @@ Auto: get_device_list → cronjob_device_v2
 Example: "Turn on bedroom light and AC at 24°C"
 → get_device_list
 → PARALLEL: switch_on_off_controls_v2 + ac_controls_mesh_v2
-→ "✅ Command to turn on bedroom light and AC (24°C) sent successfully"
+→ "✅ Bedroom light and AC (24°C) are ON"
 """

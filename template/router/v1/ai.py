@@ -150,15 +150,6 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
         logger.info(f'🔑 Token received: {request.token[:10] if request.token else "None"}...')
         
-        # agent = ToolAgent(
-        #     temperature=0.2,
-        #     model=env.MODEL_NAME,
-        #     verbose=True,
-        #     max_iterations=env.MAX_ITERATIONS,
-        #     # session_id=request.sessionId,  # Pass session_id for chat history
-        #     # conversation_id=request.conversationId
-        # )
-
         agent = ManagerAgent(
             temperature=0.2,
             model=env.MODEL_NAME,
@@ -167,19 +158,6 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             conversation_id=request.conversationId,
             max_iteration=env.MAX_ITERATIONS
         )
-
-        # agent = PlanAgent(
-        #     temperature=0.2,
-        #     model=env.MODEL_NAME,
-        #     verbose=True,
-        #     # session_id=request.sessionId,
-        #     # conversation_id=request.conversationId,
-        #     max_iteration=env.MAX_ITERATIONS
-        # )
-
-        # logger.info("🔄 Initializing ToolAgent MCP tools...")
-        # await agent.init_async()
-        # logger.info(f"✅ ToolAgent initialized with {len(agent.tools)} MCP tools")
 
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   

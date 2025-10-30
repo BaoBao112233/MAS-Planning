@@ -520,9 +520,8 @@ How can I assist you today?"""
             if self.verbose and agent_type != 'direct':
                 reasoning = state.get('reasoning_result', {}).get('reasoning', '')
                 confidence = state.get('confidence_score', 0.0)
-                
-                debug_info = f"\n\n---\n*Debug Info: Routed to {agent_type} agent (confidence: {confidence:.2f})*"
-                final_answer += debug_info
+
+                logger.info(f"Final answer: {final_answer}\n\n---\n*Debug Info: Routed to {agent_type} agent (confidence: {confidence:.2f})*")
             
             return {
                 **state,
