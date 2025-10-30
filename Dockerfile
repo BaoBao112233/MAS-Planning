@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     curl \
     git \
+    ffmpeg \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
