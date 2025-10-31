@@ -191,9 +191,9 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         try:
 
             # Save audio file temporarily
-            audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-            temp_audio_path = f"/tmp/{audio_filename}"
-            await text_to_speech(response_text, temp_audio_path)
+            # audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            # temp_audio_path = f"/tmp/{audio_filename}"
+            # await text_to_speech(response_text, temp_audio_path)
             # audio_content = await text_to_speech(response_text)
             
             
@@ -205,11 +205,11 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
                 sessionId=request.sessionId,
                 response=response_text,
                 error_status="success" if response.get('success', True) else "error",
-                audio_file_url=f"/ai/download/audio/{audio_filename}"
+                # audio_file_url=f"/ai/download/audio/{audio_filename}"
             )
             
             # Schedule cleanup of temporary file after some time
-            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600000)  # 1 hour
+            # background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600000)  # 1 hour
             
             return response_with_audio
             
