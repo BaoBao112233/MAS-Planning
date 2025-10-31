@@ -17,3 +17,6 @@ service-account.json
 \.pyc$|__pycache__/
 /logs
 /tmp
+
+
+*-logs.txt

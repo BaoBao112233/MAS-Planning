@@ -1,0 +1,404 @@
+<mxfile host="65bd71144e">
+    <diagram id="case1_timeline" name="Case 1 Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="timeline_axis" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=4;" parent="1" source="start_point" target="end_point"/>
+                <mxCell id="start_point" value="04:38:34.457" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_point" value="04:38:39.345" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1" value="PHASE 1: REQUEST RECEPTION&amp;#xa;04:38:34.457 - 04:38:34.481&amp;#xa;Duration: 0.024s (0.5%)&amp;#xa;&amp;#xa;🔹 Router Entry Point&amp;#xa;• Receive HTTP POST /ai/chat/text&amp;#xa;• Parse JSON payload&amp;#xa;• Extract sessionId &amp; message&amp;#xa;• Validate JWT token&amp;#xa;&amp;#xa;🔹 Token Processing&amp;#xa;• Decode JWT structure&amp;#xa;• Extract userId, orgId, country&amp;#xa;• Verify token expiration&amp;#xa;• Store token for downstream use&amp;#xa;&amp;#xa;🔹 Initial Routing Logic&amp;#xa;• Determine message type&amp;#xa;• Prepare data forwarding&amp;#xa;• Log reception metrics" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="150" y="150" width="180" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase1" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="240" y="330" as="sourcePoint"/>
+                        <mxPoint x="240" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2" value="PHASE 2: MANAGER ANALYSIS&amp;#xa;04:38:34.481 - 04:38:39.336&amp;#xa;Duration: 4.855s (99.8%)&amp;#xa;&amp;#xa;🔹 Agent Initialization&amp;#xa;• Load Manager Agent class&amp;#xa;• Initialize LLM model&amp;#xa;• Setup conversation context&amp;#xa;• Prepare routing engine&amp;#xa;&amp;#xa;🔹 Query Understanding&amp;#xa;• Analyze input: &amp;quot;Hello&amp;quot;&amp;#xa;• Use 1 previous message context&amp;#xa;• Determine intent: greeting&amp;#xa;• Classify as simple interaction&amp;#xa;&amp;#xa;🔹 Routing Decision Engine&amp;#xa;• Evaluate agent selection criteria&amp;#xa;• Confidence calculation: 1.00&amp;#xa;• Route to: Direct Agent&amp;#xa;• Prepare agent handoff" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="120" width="200" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase2" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="480" y="340" as="sourcePoint"/>
+                        <mxPoint x="480" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3" value="PHASE 3: DIRECT RESPONSE&amp;#xa;04:38:39.336 - 04:38:39.345&amp;#xa;Duration: 0.009s (0.2%)&amp;#xa;&amp;#xa;🔹 Agent Processing&amp;#xa;• Direct Agent receives input&amp;#xa;• Generate greeting response&amp;#xa;• Format output message&amp;#xa;• Prepare final response&amp;#xa;&amp;#xa;🔹 Response Finalization&amp;#xa;• Manager receives response&amp;#xa;• Update conversation history&amp;#xa;• Log completion metrics&amp;#xa;• Return HTTP 200 OK" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#388e3c;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="180" width="180" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase3" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="740" y="320" as="sourcePoint"/>
+                        <mxPoint x="740" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow1" value="HTTP Request" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase1" target="phase2" edge="1"/>
+                <mxCell id="flow2" value="Agent Routing" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase2" target="phase3" edge="1"/>
+                <mxCell id="flow3" value="Response" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase3" target="phase1" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="830" y="250" as="sourcePoint"/>
+                        <mxPoint x="150" y="250" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="analysis" value="🔍 DETAILED PROCESS ANALYSIS&amp;#xa;&amp;#xa;📊 Performance Breakdown:&amp;#xa;• Router: 0.024s (0.5%) - Network + parsing&amp;#xa;• Manager: 4.855s (99.8%) - LLM reasoning&amp;#xa;• Direct: 0.009s (0.2%) - Response formatting&amp;#xa;&amp;#xa;🔧 Key Components:&amp;#xa;• Router: Entry point, token validation&amp;#xa;• Manager: AI-powered routing engine&amp;#xa;• Direct Agent: Simple response handler&amp;#xa;&amp;#xa;⚡ Bottlenecks Identified:&amp;#xa;• Primary: LLM model inference (4.8s)&amp;#xa;• Secondary: Agent initialization&amp;#xa;• Tertiary: Token processing&amp;#xa;&amp;#xa;🚀 Optimization Opportunities:&amp;#xa;• Cache Manager Agent instances&amp;#xa;• Optimize LLM prompt engineering&amp;#xa;• Implement response caching&amp;#xa;• Streamline token validation" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#f57c00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="450" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="architecture" value="🏗️ ARCHITECTURE INSIGHTS&amp;#xa;&amp;#xa;🎯 Agent-Based Routing:&amp;#xa;• Manager as central orchestrator&amp;#xa;• Dynamic agent selection&amp;#xa;• Confidence-based routing&amp;#xa;&amp;#xa;🔄 Request Flow:&amp;#xa;Client → Router → Manager → Agent → Response&amp;#xa;&amp;#xa;💾 State Management:&amp;#xa;• Session-based conversations&amp;#xa;• Context preservation&amp;#xa;• History tracking&amp;#xa;&amp;#xa;🔐 Security Layer:&amp;#xa;• JWT token validation&amp;#xa;• User authentication&amp;#xa;• Request authorization&amp;#xa;&amp;#xa;📈 Scalability Factors:&amp;#xa;• Stateless agent design&amp;#xa;• Horizontal scaling potential&amp;#xa;• Resource pooling opportunities" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="450" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Case 1: Hello Message Timeline Analysis&amp;#xa;3-Phase Process Flow with Detailed Component Breakdown" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="case2_timeline" name="Case 2 Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="timeline_axis" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=4;" parent="1" source="start_point" target="end_point"/>
+                <mxCell id="start_point" value="04:39:10.000" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_point" value="04:39:26.000" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1" value="PHASE 1: INITIAL PROCESSING&amp;#xa;04:39:10.000 - 04:39:20.000&amp;#xa;Duration: 10.000s (57.1%)&amp;#xa;&amp;#xa;🔹 Router Reception&amp;#xa;• Receive device control request&amp;#xa;• Parse &amp;quot;Turn On Light 1 in the bed room&amp;quot;&amp;#xa;• Validate JWT token&amp;#xa;• Forward to Manager Agent&amp;#xa;&amp;#xa;🔹 Manager Analysis&amp;#xa;• Initialize Manager Agent&amp;#xa;• Analyze device control intent&amp;#xa;• Use 5 messages context&amp;#xa;• Determine: tool agent needed&amp;#xa;&amp;#xa;🔹 Routing Decision&amp;#xa;• Confidence: 1.00 (100%)&amp;#xa;• Route to: Tool Agent&amp;#xa;• Reasoning: Device control command" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="150" y="120" width="200" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase1" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="250" y="320" as="sourcePoint"/>
+                        <mxPoint x="250" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2" value="PHASE 2: TOOL AGENT SETUP&amp;#xa;04:39:20.000 - 04:39:26.000&amp;#xa;Duration: 6.000s (34.3%)&amp;#xa;&amp;#xa;🔹 MCP Connection Establishment&amp;#xa;• Connect to OXII API SSE endpoint&amp;#xa;• Receive session_id: aae96377...&amp;#xa;• Start post writer channel&amp;#xa;• Load 13 MCP tools&amp;#xa;&amp;#xa;🔹 Tool Agent Initialization&amp;#xa;• Initialize Tool Agent with LLM&amp;#xa;• Load comprehensive tool descriptions&amp;#xa;• Prepare reasoning framework&amp;#xa;• Set up execution environment&amp;#xa;&amp;#xa;🔹 Request Processing Start&amp;#xa;• Receive device control request&amp;#xa;• Begin reasoning phase (Iteration 0)&amp;#xa;• Plan tool execution sequence" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="100" width="200" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase2" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="500" y="320" as="sourcePoint"/>
+                        <mxPoint x="500" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3" value="PHASE 3: DEVICE DISCOVERY&amp;#xa;04:39:26.000 (within execution)&amp;#xa;Duration: ~0.000s (API call)&amp;#xa;&amp;#xa;🔹 Tool Planning&amp;#xa;• LLM reasoning identifies need&amp;#xa;• Plan: get_device_list first&amp;#xa;• Tool call: 1 prerequisite tool&amp;#xa;• Sequential execution mode&amp;#xa;&amp;#xa;🔹 MCP Client Creation&amp;#xa;• Fresh MCP client for get_device_list&amp;#xa;• New SSE session: e19a5aca...&amp;#xa;• Connect to OXII API&amp;#xa;• Execute get_device_list tool&amp;#xa;&amp;#xa;🔹 Device Data Retrieval&amp;#xa;• Receive device structure&amp;#xa;• Parse house/room/button data&amp;#xa;• Store for subsequent use&amp;#xa;• Clean up MCP client" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#388e3c;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="150" width="200" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase3" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="750" y="330" as="sourcePoint"/>
+                        <mxPoint x="750" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase4" value="PHASE 4: DEVICE CONTROL&amp;#xa;04:39:26.000 (completion)&amp;#xa;Duration: ~0.000s (API call)&amp;#xa;&amp;#xa;🔹 Control Command Planning&amp;#xa;• Use device data from discovery&amp;#xa;• Identify target device/button&amp;#xa;• Plan switch_on_off_controls_v2&amp;#xa;• Prepare execution parameters&amp;#xa;&amp;#xa;🔹 Control Execution&amp;#xa;• Call switch_on_off_controls_v2&amp;#xa;• Parameters: data=1.0, buttonId=X&amp;#xa;• MCP client for control action&amp;#xa;• Execute device state change&amp;#xa;&amp;#xa;🔹 Success Confirmation&amp;#xa;• Receive success response&amp;#xa;• &amp;quot;Thiết bị Đèn 1 đã được bật&amp;quot;&amp;#xa;• Clean up MCP client&amp;#xa;• Mark execution complete" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#f57c00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="180" width="200" height="160" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase4" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1000" y="340" as="sourcePoint"/>
+                        <mxPoint x="1000" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow1" value="Device Control Request" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase1" target="phase2" edge="1"/>
+                <mxCell id="flow2" value="Tool Agent Ready" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase2" target="phase3" edge="1"/>
+                <mxCell id="flow3" value="Device Data" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase3" target="phase4" edge="1"/>
+                <mxCell id="flow4" value="Success Response" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase4" target="phase1" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1100" y="220" as="sourcePoint"/>
+                        <mxPoint x="150" y="220" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="mcp_analysis" value="🔧 MCP PROTOCOL ANALYSIS&amp;#xa;&amp;#xa;📡 Connection Management:&amp;#xa;• Multiple SSE sessions per case&amp;#xa;• Session isolation: aae96377... &amp; e19a5aca...&amp;#xa;• Fresh clients for each tool call&amp;#xa;• Automatic cleanup after execution&amp;#xa;&amp;#xa;🛠️ Tool Execution Framework:&amp;#xa;• 13 available OXII API tools&amp;#xa;• Sequential prerequisite execution&amp;#xa;• Parallel independent tool execution&amp;#xa;• Comprehensive error handling&amp;#xa;&amp;#xa;🔄 Session Lifecycle:&amp;#xa;• SSE endpoint connection&amp;#xa;• Session ID negotiation&amp;#xa;• Message channel establishment&amp;#xa;• Connection termination&amp;#xa;&amp;#xa;⚡ Performance Characteristics:&amp;#xa;• Fast API response times&amp;#xa;• Network latency minimal&amp;#xa;• Tool planning overhead&amp;#xa;• Reasoning iteration costs" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#2e7d32;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="450" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="optimization" value="🚀 OPTIMIZATION INSIGHTS&amp;#xa;&amp;#xa;🎯 Current Bottlenecks:&amp;#xa;• LLM reasoning: 6s (34.3%)&amp;#xa;• Manager analysis: 10s (57.1%)&amp;#xa;• Tool setup: minimal overhead&amp;#xa;• API calls: near instantaneous&amp;#xa;&amp;#xa;💡 Improvement Opportunities:&amp;#xa;• Cache device information&amp;#xa;• Reduce reasoning iterations&amp;#xa;• Optimize LLM prompts&amp;#xa;• Parallel tool execution&amp;#xa;&amp;#xa;📊 Performance Targets:&amp;#xa;• Target: &amp;lt;3s for device control&amp;#xa;• Potential: 70-80% reduction&amp;#xa;• Focus: Reasoning optimization&amp;#xa;• Method: Context utilization&amp;#xa;&amp;#xa;🔄 Process Refinements:&amp;#xa;• Streamline agent initialization&amp;#xa;• Implement device data caching&amp;#xa;• Reduce MCP connection overhead&amp;#xa;• Enhance error recovery" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="450" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Case 2: Turn On Light Timeline Analysis&amp;#xa;4-Phase Device Control Process with MCP Integration" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="case3_timeline" name="Case 3 Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="timeline_axis" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=4;" parent="1" source="start_point" target="end_point"/>
+                <mxCell id="start_point" value="04:41:33.697" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_point" value="04:42:03.607" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1" value="PHASE 1: RECEPTION &amp; ROUTING&amp;#xa;04:41:33.697 - 04:41:42.204&amp;#xa;Duration: 8.507s (28.4%)&amp;#xa;&amp;#xa;🔹 Request Reception&amp;#xa;• Router receives identical request&amp;#xa;• Parse &amp;quot;Turn On Light 1 in the bed room&amp;quot;&amp;#xa;• JWT token validation&amp;#xa;• Forward to Manager Agent&amp;#xa;&amp;#xa;🔹 Manager Processing&amp;#xa;• Agent initialization&amp;#xa;• Query analysis with 5 messages context&amp;#xa;• Intent recognition: device control&amp;#xa;• Context utilization from previous case&amp;#xa;&amp;#xa;🔹 Routing Decision&amp;#xa;• Confidence calculation: 1.00&amp;#xa;• Route to Tool Agent&amp;#xa;• Reasoning: Device control required" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="150" y="120" width="180" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase1" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="240" y="320" as="sourcePoint"/>
+                        <mxPoint x="240" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2" value="PHASE 2: TOOL AGENT INIT&amp;#xa;04:41:42.204 - 04:41:43.293&amp;#xa;Duration: 1.089s (3.6%)&amp;#xa;&amp;#xa;🔹 MCP Connection Setup&amp;#xa;• SSE endpoint connection&amp;#xa;• Session negotiation: 2206e1bb...&amp;#xa;• Post writer channel establishment&amp;#xa;• Tool loading: 13 MCP tools&amp;#xa;&amp;#xa;🔹 Agent Preparation&amp;#xa;• Tool Agent initialization&amp;#xa;• LLM model loading&amp;#xa;• System prompt configuration&amp;#xa;• Execution environment setup&amp;#xa;&amp;#xa;🔹 Request Handover&amp;#xa;• Receive device control request&amp;#xa;• Context from previous interactions&amp;#xa;• Begin reasoning phase&amp;#xa;• Prepare tool execution framework" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="370" y="140" width="180" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase2" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="460" y="320" as="sourcePoint"/>
+                        <mxPoint x="460" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3" value="PHASE 3: REASONING ITERATION 0&amp;#xa;04:41:43.297 - 04:41:49.578&amp;#xa;Duration: 6.281s (21.0%)&amp;#xa;&amp;#xa;🔹 Initial Analysis&amp;#xa;• LLM processes device control request&amp;#xa;• Analyzes intent and context&amp;#xa;• Determines action sequence&amp;#xa;• Plans tool execution strategy&amp;#xa;&amp;#xa;🔹 Tool Planning&amp;#xa;• Identifies get_device_list requirement&amp;#xa;• Plans 1 tool call&amp;#xa;• Sequential execution mode&amp;#xa;• Prepares execution parameters&amp;#xa;&amp;#xa;🔹 Decision Making&amp;#xa;• Evaluates device discovery needs&amp;#xa;• Considers context availability&amp;#xa;• Determines prerequisite actions&amp;#xa;• Finalizes execution plan" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#388e3c;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="590" y="100" width="180" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase3" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="680" y="300" as="sourcePoint"/>
+                        <mxPoint x="680" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase4" value="PHASE 4: DEVICE DISCOVERY&amp;#xa;04:41:49.578 - 04:41:50.265&amp;#xa;Duration: 0.687s (2.3%)&amp;#xa;&amp;#xa;🔹 Tool Execution Setup&amp;#xa;• Fresh MCP client creation&amp;#xa;• New SSE session: c3261367...&amp;#xa;• Connection to OXII API&amp;#xa;• Tool invocation preparation&amp;#xa;&amp;#xa;🔹 get_device_list Call&amp;#xa;• Execute device discovery&amp;#xa;• Retrieve house/room structure&amp;#xa;• Parse device information&amp;#xa;• Store data for next phase&amp;#xa;&amp;#xa;🔹 Result Processing&amp;#xa;• Receive 13757 characters data&amp;#xa;• Extract relevant device info&amp;#xa;• Clean up MCP client&amp;#xa;• Mark discovery complete" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#f57c00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="810" y="120" width="180" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase4" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="900" y="300" as="sourcePoint"/>
+                        <mxPoint x="900" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase5" value="PHASE 5: REASONING ITERATION 1&amp;#xa;04:41:50.265 - 04:41:58.043&amp;#xa;Duration: 7.778s (26.0%)&amp;#xa;&amp;#xa;🔹 Context Integration&amp;#xa;• Process device discovery results&amp;#xa;• Update reasoning with new data&amp;#xa;• Refine action plan&amp;#xa;• Optimize execution strategy&amp;#xa;&amp;#xa;🔹 Control Planning&amp;#xa;• Identify target device/button&amp;#xa;• Plan switch_on_off_controls_v2&amp;#xa;• Prepare execution parameters&amp;#xa;• Validate action sequence&amp;#xa;&amp;#xa;🔹 Execution Strategy&amp;#xa;• Determine parallel vs sequential&amp;#xa;• Plan 1 independent tool call&amp;#xa;• Set up monitoring framework&amp;#xa;• Finalize control command" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="400" width="180" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase5_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase5" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="140" y="580" as="sourcePoint"/>
+                        <mxPoint x="140" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase6" value="PHASE 6: CONTROL EXECUTION&amp;#xa;04:41:58.043 - 04:42:03.607&amp;#xa;Duration: 5.564s (18.6%)&amp;#xa;&amp;#xa;🔹 Tool Execution&amp;#xa;• Call switch_on_off_controls_v2&amp;#xa;• Parameters: data=1.0, buttonId=1662&amp;#xa;• MCP client for control action&amp;#xa;• Execute device state change&amp;#xa;&amp;#xa;🔹 Response Processing&amp;#xa;• Receive success confirmation&amp;#xa;• &amp;quot;Thiết bị Đèn 1 đã được bật&amp;quot;&amp;#xa;• Validate execution result&amp;#xa;• Clean up MCP client&amp;#xa;&amp;#xa;🔹 Finalization&amp;#xa;• Mark execution complete&amp;#xa;• Prepare response formatting&amp;#xa;• Update conversation history&amp;#xa;• Return success message" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="420" width="180" height="160" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase6_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase6" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="370" y="580" as="sourcePoint"/>
+                        <mxPoint x="370" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow1" value="Request" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase1" target="phase2" edge="1"/>
+                <mxCell id="flow2" value="Setup Complete" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase2" target="phase3" edge="1"/>
+                <mxCell id="flow3" value="Plan Ready" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase3" target="phase4" edge="1"/>
+                <mxCell id="flow4" value="Device Data" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase4" target="phase5" edge="1"/>
+                <mxCell id="flow5" value="Control Plan" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase5" target="phase6" edge="1"/>
+                <mxCell id="context_analysis" value="🎯 CONTEXT OPTIMIZATION ANALYSIS&amp;#xa;&amp;#xa;📊 Case 3 vs Case 2 Comparison:&amp;#xa;• Case 2: 7.36s (first time)&amp;#xa;• Case 3: 29.91s (second time)&amp;#xa;• Difference: +22.55s (+306%)&amp;#xa;&amp;#xa;🔍 Root Cause Analysis:&amp;#xa;• Case 2: Fresh reasoning, no context&amp;#xa;• Case 3: Complex multi-iteration reasoning&amp;#xa;• Context utilization not optimized&amp;#xa;• Reasoning overhead increased&amp;#xa;&amp;#xa;💡 Optimization Insights:&amp;#xa;• Context should reduce reasoning time&amp;#xa;• Current implementation adds overhead&amp;#xa;• Need better context integration&amp;#xa;• Reasoning strategy needs refinement&amp;#xa;&amp;#xa;🚀 Improvement Opportunities:&amp;#xa;• Streamline reasoning iterations&amp;#xa;• Better context utilization&amp;#xa;• Reduce LLM inference cycles&amp;#xa;• Optimize tool planning logic" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#2e7d32;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="450" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="technical_dive" value="🔬 TECHNICAL DEEP DIVE&amp;#xa;&amp;#xa;🧠 Reasoning Framework:&amp;#xa;• Iteration 0: Initial planning (6.3s)&amp;#xa;• Iteration 1: Context integration (7.8s)&amp;#xa;• Total reasoning: 14.1s (47.1%)&amp;#xa;• Efficiency: Decreased vs Case 2&amp;#xa;&amp;#xa;🔧 Tool Execution Pattern:&amp;#xa;• Sequential prerequisite discovery&amp;#xa;• Parallel independent execution&amp;#xa;• Fresh MCP clients per call&amp;#xa;• Session isolation maintained&amp;#xa;&amp;#xa;💾 Context Management:&amp;#xa;• 5-message conversation history&amp;#xa;• Device data caching potential&amp;#xa;• State preservation across calls&amp;#xa;• Memory utilization analysis&amp;#xa;&amp;#xa;⚡ Performance Characteristics:&amp;#xa;• LLM inference: Major bottleneck&amp;#xa;• Network/API: Minimal latency&amp;#xa;• Tool setup: Optimized&amp;#xa;• Context processing: Needs work" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="650" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Case 3: Turn On Light (Time 2) Timeline Analysis&amp;#xa;6-Phase Iterative Reasoning Process with Context Integration" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="case4_timeline" name="Case 4 Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="timeline_axis" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=4;" parent="1" source="start_point" target="end_point"/>
+                <mxCell id="start_point" value="04:42:33.592" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_point" value="04:42:55.939" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1" value="PHASE 1: REQUEST PROCESSING&amp;#xa;04:42:33.592 - 04:42:36.471&amp;#xa;Duration: 2.879s (12.2%)&amp;#xa;&amp;#xa;🔹 Router Reception&amp;#xa;• Receive &amp;quot;Turn off Light 1 in the bed room&amp;quot;&amp;#xa;• Parse turn-off command&amp;#xa;• Validate JWT token&amp;#xa;• Forward to Manager Agent&amp;#xa;&amp;#xa;🔹 Manager Analysis&amp;#xa;• Agent initialization&amp;#xa;• Query analysis with 6 messages context&amp;#xa;• Intent: device control (turn off)&amp;#xa;• Context from previous interactions&amp;#xa;&amp;#xa;🔹 Routing Decision&amp;#xa;• Confidence: 1.00 (100%)&amp;#xa;• Route to Tool Agent&amp;#xa;• Reasoning: Device control required" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="150" y="120" width="180" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase1_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase1" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="240" y="320" as="sourcePoint"/>
+                        <mxPoint x="240" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2" value="PHASE 2: TOOL AGENT SETUP&amp;#xa;04:42:36.471 - 04:42:37.013&amp;#xa;Duration: 0.542s (2.3%)&amp;#xa;&amp;#xa;🔹 MCP Connection&amp;#xa;• SSE endpoint connection&amp;#xa;• Session ID: 0694dd40e3304fb99a5d592a47b6a723&amp;#xa;• Post writer channel setup&amp;#xa;• Load 13 MCP tools&amp;#xa;&amp;#xa;🔹 Agent Initialization&amp;#xa;• Tool Agent preparation&amp;#xa;• LLM model ready&amp;#xa;• System prompt loaded&amp;#xa;• Execution framework initialized&amp;#xa;&amp;#xa;🔹 Request Transfer&amp;#xa;• Receive turn-off command&amp;#xa;• Context preservation&amp;#xa;• Begin processing&amp;#xa;• Skip detailed logging" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="370" y="140" width="180" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase2" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="460" y="320" as="sourcePoint"/>
+                        <mxPoint x="460" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3" value="PHASE 3: OPTIMIZED PROCESSING&amp;#xa;04:42:37.013 - 04:42:55.930&amp;#xa;Duration: 18.917s (80.1%)&amp;#xa;&amp;#xa;🔹 Context-Based Execution&amp;#xa;• Utilize previous device knowledge&amp;#xa;• Skip redundant discovery&amp;#xa;• Direct control command execution&amp;#xa;• Optimized reasoning path&amp;#xa;&amp;#xa;🔹 Tool Agent Reasoning&amp;#xa;• Multiple reasoning iterations&amp;#xa;• Context-aware decision making&amp;#xa;• Efficient tool planning&amp;#xa;• Streamlined execution&amp;#xa;&amp;#xa;🔹 Device Control&amp;#xa;• Execute turn-off command&amp;#xa;• Use cached device information&amp;#xa;• Minimal API overhead&amp;#xa;• Success confirmation&amp;#xa;&amp;#xa;🔹 Response Finalization&amp;#xa;• Format success message&amp;#xa;• Update conversation history&amp;#xa;• Complete processing&amp;#xa;• Return HTTP response" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#388e3c;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="590" y="100" width="200" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase3" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="690" y="320" as="sourcePoint"/>
+                        <mxPoint x="690" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase4" value="PHASE 4: COMPLETION&amp;#xa;04:42:55.930 - 04:42:55.939&amp;#xa;Duration: 0.009s (0.04%)&amp;#xa;&amp;#xa;🔹 Response Formatting&amp;#xa;• Finalize success message&amp;#xa;• Prepare HTTP response&amp;#xa;• Log completion metrics&amp;#xa;• Clean up resources&amp;#xa;&amp;#xa;🔹 History Update&amp;#xa;• Save conversation to history&amp;#xa;• Update session state&amp;#xa;• Record performance metrics&amp;#xa;• Close processing cycle" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#f57c00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="850" y="160" width="180" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="phase4" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="940" y="300" as="sourcePoint"/>
+                        <mxPoint x="940" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow1" value="Turn Off Request" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase1" target="phase2" edge="1"/>
+                <mxCell id="flow2" value="Agent Ready" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase2" target="phase3" edge="1"/>
+                <mxCell id="flow3" value="Processing Complete" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="phase3" target="phase4" edge="1"/>
+                <mxCell id="context_success" value="🎯 CONTEXT OPTIMIZATION SUCCESS&amp;#xa;&amp;#xa;📊 Performance Improvement:&amp;#xa;• Case 3: 29.91s (no optimization)&amp;#xa;• Case 4: 22.32s (context utilized)&amp;#xa;• Improvement: -7.59s (-25.4%)&amp;#xa;&amp;#xa;🔍 Key Optimization Factors:&amp;#xa;• Context memory utilization&amp;#xa;• Reduced reasoning iterations&amp;#xa;• Skip redundant operations&amp;#xa;• Efficient state management&amp;#xa;&amp;#xa;💡 Optimization Mechanisms:&amp;#xa;• Conversation history preservation&amp;#xa;• Device information caching&amp;#xa;• State-aware processing&amp;#xa;• Intelligent routing decisions&amp;#xa;&amp;#xa;📈 Scalability Benefits:&amp;#xa;• Learning from interactions&amp;#xa;• Reduced computational overhead&amp;#xa;• Improved user experience&amp;#xa;• Resource efficiency gains" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#2e7d32;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="450" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="streamlining" value="🔄 PROCESS STREAMLINING ANALYSIS&amp;#xa;&amp;#xa;⚡ Efficiency Gains:&amp;#xa;• Router processing: 0.019s (0.08%)&amp;#xa;• Manager analysis: 2.879s (12.2%)&amp;#xa;• Tool setup: 0.542s (2.3%)&amp;#xa;• Optimized execution: 18.917s (80.1%)&amp;#xa;&amp;#xa;🔧 Technical Optimizations:&amp;#xa;• Reduced agent initialization time&amp;#xa;• Context-aware routing&amp;#xa;• Minimal MCP connection overhead&amp;#xa;• Streamlined reasoning process&amp;#xa;&amp;#xa;📊 Comparative Metrics:&amp;#xa;• Case 2: 7.36s (first time baseline)&amp;#xa;• Case 4: 22.32s (optimized repeat)&amp;#xa;• Ratio: 3.03x vs baseline&amp;#xa;• Context benefit: Clear improvement&amp;#xa;&amp;#xa;🚀 Future Optimization Potential:&amp;#xa;• Further reduce reasoning time&amp;#xa;• Implement device data caching&amp;#xa;• Optimize LLM inference&amp;#xa;• Enhance context utilization" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="450" width="400" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Case 4: Turn Off Light Timeline Analysis&amp;#xa;4-Phase Optimized Process with Context Utilization" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="case5_timeline" name="Case 5 Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="timeline_axis" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=4;" parent="1" source="start_point" target="end_point"/>
+                <mxCell id="start_point" value="04:44:06.240" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_point" value="04:46:09.819" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="350" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="creation_phase" value="PHASE A: PLAN CREATION&amp;#xa;04:44:06.240 - 04:44:51.641&amp;#xa;Duration: 45.401s (43.4%)&amp;#xa;&amp;#xa;🔹 A1: Input Analysis (14.338s)&amp;#xa;• Router receives plan request&amp;#xa;• Manager analyzes &amp;quot;Create Plan&amp;quot;&amp;#xa;• Route to Plan Agent (confidence 1.00)&amp;#xa;• LLM processes requirements&amp;#xa;&amp;#xa;🔹 A2: Device Discovery (0.734s)&amp;#xa;• Plan Agent initializes MCP&amp;#xa;• get_device_list execution&amp;#xa;• Retrieve 13757 chars data&amp;#xa;• Parse 6 rooms structure&amp;#xa;&amp;#xa;🔹 A3: Plan Generation (22.607s)&amp;#xa;• LLM creates 3 priority plans&amp;#xa;• Security, Convenience, Energy&amp;#xa;• Each plan with 3 tasks&amp;#xa;• Response formatting" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="150" y="100" width="250" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="creation_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="creation_phase" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="275" y="300" as="sourcePoint"/>
+                        <mxPoint x="275" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="selection_phase" value="PHASE B: PLAN SELECTION&amp;#xa;04:45:10.144 - 04:45:17.278&amp;#xa;Duration: 7.134s (6.8%)&amp;#xa;&amp;#xa;🔹 User Selection&amp;#xa;• Router receives &amp;quot;Plan 1&amp;quot;&amp;#xa;• Manager analyzes selection&amp;#xa;• Load cached plan options&amp;#xa;• Route to Plan Agent&amp;#xa;&amp;#xa;🔹 Agent Re-initialization&amp;#xa;• Plan Agent setup&amp;#xa;• MCP connections established&amp;#xa;• Load Security Plan&amp;#xa;• Prepare execution framework&amp;#xa;&amp;#xa;🔹 Plan Upload&amp;#xa;• Create plan in API&amp;#xa;• Set status: RUNNING&amp;#xa;• Map 3 tasks with IDs&amp;#xa;• Initialize tracking" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="450" y="120" width="200" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="selection_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="selection_phase" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="550" y="300" as="sourcePoint"/>
+                        <mxPoint x="550" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="execution_phase" value="PHASE C: PLAN EXECUTION&amp;#xa;04:45:17.844 - 04:46:09.819&amp;#xa;Duration: 51.975s (49.8%)&amp;#xa;&amp;#xa;🔹 C1: Task 1 - Turn off Đèn trần (20.668s)&amp;#xa;• Tool Agent reasoning (2 iterations)&amp;#xa;• get_device_list + switch_on_off_controls_v2&amp;#xa;• Button ID: 1927, data: 0.0&amp;#xa;• Success confirmation&amp;#xa;&amp;#xa;🔹 C2: Task 2 - Turn off Đèn đọc sách (17.352s)&amp;#xa;• Similar reasoning pattern&amp;#xa;• Button ID: 1929, data: 0.0&amp;#xa;• Sequential execution&amp;#xa;• API success response&amp;#xa;&amp;#xa;🔹 C3: Task 3 - Turn on Đèn ngủ (12.342s)&amp;#xa;• Final task execution&amp;#xa;• Button ID: 1926, data: 1.0&amp;#xa;• Completion notification&amp;#xa;• Plan status: DONE" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#388e3c;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="80" width="250" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="execution_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="execution_phase" target="timeline_axis" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="825" y="300" as="sourcePoint"/>
+                        <mxPoint x="825" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow1" value="Plan Request" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="creation_phase" target="selection_phase" edge="1"/>
+                <mxCell id="flow2" value="Plan 1 Selected" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="selection_phase" target="execution_phase" edge="1"/>
+                <mxCell id="flow3" value="Execution Complete" style="endArrow=classic;html=1;fontSize=9;" parent="1" source="execution_phase" target="creation_phase" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="950" y="200" as="sourcePoint"/>
+                        <mxPoint x="150" y="200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="architecture" value="🏗️ PLAN ARCHITECTURE ANALYSIS&amp;#xa;&amp;#xa;🎯 Multi-Agent Orchestration:&amp;#xa;• Manager Agent: Central routing&amp;#xa;• Plan Agent: Complex task planning&amp;#xa;• Tool Agent: Device control execution&amp;#xa;• API Integration: Task tracking&amp;#xa;&amp;#xa;🔄 Execution Workflow:&amp;#xa;• Plan Creation → User Selection → Sequential Execution&amp;#xa;• State Management: RUNNING → DONE transitions&amp;#xa;• Error Handling: Individual task failure recovery&amp;#xa;• Progress Tracking: Real-time status updates&amp;#xa;&amp;#xa;💾 Data Flow:&amp;#xa;• Device discovery → Plan generation → Task mapping&amp;#xa;• Context preservation → State synchronization&amp;#xa;• Result aggregation → Response formatting&amp;#xa;&amp;#xa;⚡ Performance Characteristics:&amp;#xa;• Creation: LLM-intensive (45.4s)&amp;#xa;• Selection: Fast routing (7.1s)&amp;#xa;• Execution: Sequential tasks (52.0s)&amp;#xa;• Total: Complex orchestration (104.1s)" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#2e7d32;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="450" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="optimization" value="🚀 OPTIMIZATION OPPORTUNITIES&amp;#xa;&amp;#xa;🎯 Immediate Improvements (20-40%):&amp;#xa;• Cache device information (save ~0.7s)&amp;#xa;• Optimize LLM prompts (save ~15-20s)&amp;#xa;• Parallel task execution (save ~15-20s)&amp;#xa;• Streamline agent initialization&amp;#xa;&amp;#xa;🎯 Medium-term Enhancements (40-60%):&amp;#xa;• Pre-computed plan templates&amp;#xa;• Advanced context utilization&amp;#xa;• Intelligent task batching&amp;#xa;• API response caching&amp;#xa;&amp;#xa;🎯 Long-term Innovations (60-80%):&amp;#xa;• Predictive plan generation&amp;#xa;• Multi-modal plan creation&amp;#xa;• Real-time execution monitoring&amp;#xa;• Adaptive optimization&amp;#xa;&amp;#xa;📊 Target Performance:&amp;#xa;• Plan Creation: &amp;lt;15s (67% reduction)&amp;#xa;• Plan Execution: &amp;lt;25s (52% reduction)&amp;#xa;• Total Time: &amp;lt;40s (62% reduction)&amp;#xa;• User Experience: Sub-30s workflows" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#c2185b;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="450" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Case 5: Plan Creation &amp; Execution Timeline Analysis&amp;#xa;3-Phase Complex Workflow with Multi-Agent Orchestration" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="comparative_timeline" name="Comparative Timeline Analysis">
+        <mxGraphModel dx="2181" dy="1405" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="master_timeline" value="" style="shape=line;direction=south;endArrow=none;startArrow=none;strokeColor=#000000;strokeWidth=5;" parent="1" source="master_start" target="master_end"/>
+                <mxCell id="master_start" value="04:38:00" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="400" width="80" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="master_end" value="04:46:30" style="shape=ellipse;whiteSpace=wrap;html=1;aspect=fixed;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="400" width="80" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="case1_timeline" value="Case 1: Hello&amp;#xa;04:38:34-04:38:39 (4.86s)&amp;#xa;Direct Agent Path" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e1f5fe;strokeColor=#01579b;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="200" width="140" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="case1_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="case1_timeline" target="master_timeline" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="190" y="280" as="sourcePoint"/>
+                        <mxPoint x="190" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="case2_timeline" value="Case 2: Turn On Light&amp;#xa;04:39:10-04:39:26 (7.36s)&amp;#xa;Tool Agent Discovery" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#f3e5f5;strokeColor=#4a148c;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="150" width="160" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="case2_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="case2_timeline" target="master_timeline" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="360" y="250" as="sourcePoint"/>
+                        <mxPoint x="360" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="case3_timeline" value="Case 3: Turn On Light (2nd)&amp;#xa;04:41:33-04:42:03 (29.91s)&amp;#xa;Tool Agent Reasoning" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e8f5e8;strokeColor=#1b5e20;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="480" y="120" width="180" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="case3_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="case3_timeline" target="master_timeline" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="570" y="240" as="sourcePoint"/>
+                        <mxPoint x="570" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="case4_timeline" value="Case 4: Turn Off Light&amp;#xa;04:42:33-04:42:55 (22.32s)&amp;#xa;Tool Agent Optimized" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#e65100;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="180" width="160" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="case4_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="case4_timeline" target="master_timeline" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="800" y="280" as="sourcePoint"/>
+                        <mxPoint x="800" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="case5_timeline" value="Case 5: Plan Creation &amp; Execution&amp;#xa;04:44:06-04:46:09 (104.05s)&amp;#xa;Plan Agent Complex" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fce4ec;strokeColor=#880e4f;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="80" width="200" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="case5_line" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="case5_timeline" target="master_timeline" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1020" y="220" as="sourcePoint"/>
+                        <mxPoint x="1020" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="flow_analysis" value="🔄 PROCESS FLOW ANALYSIS&amp;#xa;&amp;#xa;📊 Agent Routing Patterns:&amp;#xa;• Case 1: Router → Manager → Direct Agent&amp;#xa;• Cases 2-4: Router → Manager → Tool Agent&amp;#xa;• Case 5: Router → Manager → Plan Agent → Tool Agent&amp;#xa;&amp;#xa;🔧 Technical Architecture:&amp;#xa;• MCP Protocol: SSE-based communication&amp;#xa;• Session Management: Isolated per operation&amp;#xa;• Context Preservation: Conversation history&amp;#xa;• State Synchronization: API-backed tracking&amp;#xa;&amp;#xa;⚡ Performance Characteristics:&amp;#xa;• Direct Agent: Fastest (4.86s)&amp;#xa;• Tool Agent: Variable (7-30s)&amp;#xa;• Plan Agent: Most complex (104s)&amp;#xa;• Context Optimization: 25% improvement&amp;#xa;&amp;#xa;🎯 Optimization Opportunities:&amp;#xa;• LLM Reasoning: 49-99% of processing time&amp;#xa;• Agent Initialization: 1-7s overhead&amp;#xa;• Sequential Execution: Parallel potential&amp;#xa;• Device Caching: Reduce discovery calls" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#e3f2fd;strokeColor=#1976d2;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="50" y="500" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="bottleneck_analysis" value="🎯 BOTTLENECK ANALYSIS&amp;#xa;&amp;#xa;🔴 Primary Bottlenecks:&amp;#xa;• LLM Inference Time: 49-99% of total&amp;#xa;  - Case 1: 4.85s (99.8%)&amp;#xa;  - Case 3: 14.1s (47.1%)&amp;#xa;  - Case 5: ~72s (69.2%)&amp;#xa;&amp;#xa;🟡 Secondary Bottlenecks:&amp;#xa;• Agent Initialization: 1-7s&amp;#xa;  - Manager setup overhead&amp;#xa;  - MCP connection establishment&amp;#xa;  - Model loading time&amp;#xa;&amp;#xa;🟢 Tertiary Bottlenecks:&amp;#xa;• Sequential Processing: Task dependencies&amp;#xa;• Context Processing: History analysis&amp;#xa;• API Latency: Network overhead&amp;#xa;&amp;#xa;💡 Key Insights:&amp;#xa;• Reasoning complexity drives performance&amp;#xa;• Context should reduce overhead&amp;#xa;• Agent architecture adds latency&amp;#xa;• Parallel execution opportunities exist" style="shape=rectangle;whiteSpace=wrap;html=1;rounded=1;fillColor=#fff3e0;strokeColor=#f57c00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="500" width="400" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="title" value="Comparative Timeline Analysis: MAS-Planning System&amp;#xa;5 Cases with Process Flow, Architecture &amp; Optimization Insights" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="500" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
