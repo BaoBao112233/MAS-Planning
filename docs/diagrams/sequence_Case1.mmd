@@ -1,22 +1,64 @@
 sequenceDiagram
-    autonumber
+    actor User
     participant Client
-    participant Router as template.router.v1.ai
-    participant Manager as template.agent.manager
-    participant DirectAgent as direct.agent
-    participant History as Conversation History
+    participant Router
+    participant Manager as Manager Agent
+    participant Redis as Chat History (Redis)
+    participant LLM as Gemini 2.5 Pro
 
-    Client->>Router: Gửi message "Hello" + Token JWT
-    Router->>Router: Nhận sessionId: testing1234
-    Router->>Manager: Gửi input {"input": "Hello", "token": "<JWT>"}
+    Note over User,LLM: Case 1: Simple Greeting - Manager Internal Direct Response<br/>Total: 4.86s (04:38:34 → 04:38:39)
+
+    %% Request Phase
+    User->>Client: "Hello"
+    Client->>Router: POST /ai/chat/text<br/>message: "Hello"<br/>token: JWT<br/>sessionId: testing1234
+    activate Router
+    Note over Router: 04:38:34.457<br/>Token validation
+
+    %% Manager Initialization
+    Router->>Manager: Initialize & Process<br/>{input: "Hello", token}
     activate Manager
-    Manager->>Manager: Xác thực token
-    Manager->>Manager: Phân tích truy vấn "Hello"
-    Manager->>Manager: Sử dụng 1 message trước đó làm ngữ cảnh
-    Manager->>Manager: Quyết định định tuyến: direct (confidence: 1.00)
-    Manager->>DirectAgent: Gửi truy vấn tới Direct Agent
-    DirectAgent-->>Manager: Trả phản hồi lời chào
-    Manager->>History: Ghi lịch sử hội thoại (session: testing1234)
+    Note over Manager: 04:38:34.481<br/>⚡ Init: 0.024s<br/>Manager Agent ready
+    
+    rect rgb(200, 220, 240)
+        Note over Manager,LLM: 🔍 ANALYZE_QUERY NODE
+        Manager->>Redis: Load conversation context
+        activate Redis
+        Redis-->>Manager: 1 previous message
+        deactivate Redis
+        Note over Manager: 04:38:34.484<br/>📚 Context loaded
+
+        Manager->>LLM: Analyze query with MANAGER_PROMPT<br/>"Hello" + context
+        activate LLM
+        Note over LLM: 04:38:34.484 → 04:38:39.336<br/>⏱️ LLM Routing Decision: ~4.852s<br/>(BOTTLENECK - Gemini 2.5 Pro)
+        LLM-->>Manager: reasoning: Simple greeting<br/>agent_type: direct<br/>confidence: 1.00<br/>direct_answer: Greeting text
+        deactivate LLM
+        Note over Manager: 04:38:39.336<br/>🎯 Routing: agent_type="direct"
+    end
+
+    rect rgb(220, 240, 200)
+        Note over Manager: 🚀 DELEGATE NODE (Internal Direct Handler)
+        Manager->>Manager: route_to_agent(state)<br/>agent_type == 'direct'<br/>→ Handle internally
+        Note over Manager: 04:38:39.337<br/>Extract direct_answer from<br/>reasoning_result<br/>(No external agent call)
+        Note over Manager: delegation_result = {<br/>  'output': direct_answer,<br/>  'agent_type': 'direct',<br/>  'success': True<br/>}
+    end
+
+    rect rgb(240, 220, 200)
+        Note over Manager: 📝 FINALIZE NODE
+        Manager->>Manager: finalize_response(state)<br/>format_final_response()
+        Note over Manager: 04:38:39.337<br/>📄 Final output formatted:<br/>"🤖 Smart Home Assistant<br/>I can help you with..."
+    end
+
+    Manager->>Redis: Save conversation<br/>(user + AI messages)
+    activate Redis
+    Redis-->>Manager: ✅ Saved to session
+    deactivate Redis
+    Note over Manager: 04:38:39.345<br/>💾 History updated
+
+    Manager-->>Router: Success response<br/>Total time: 4.86s
     deactivate Manager
-    Manager-->>Router: Hoàn tất xử lý (✅ success, 4.86s)
-    Router-->>Client: Trả về phản hồi "Hello" (OK 200)
+    Router-->>Client: HTTP 200 OK<br/>response text
+    deactivate Router
+    Client-->>User: Display greeting
+
+    %% Timing Breakdown
+    Note over User,LLM: ⏱️ Timing Breakdown:<br/>• Router → Manager Init: 0.024s<br/>• ANALYZE_QUERY (LLM): 4.852s ⚠️ BOTTLENECK<br/>  └─ Load context: ~0.003s<br/>  └─ Gemini LLM call: ~4.849s<br/>• DELEGATE (internal): 0.001s<br/>• FINALIZE: 0.001s<br/>• Save history: 0.008s<br/>• Total: 4.86s<br/><br/>💡 Key: Manager handles "direct" responses internally<br/>NO separate Direct Agent exists

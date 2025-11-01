@@ -1,0 +1,125 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router as FastAPI Router<br/>(template.router.v1.ai)
+    participant Manager as Manager Agent<br/>(template.agent.manager)
+    participant Tool as Tool Agent<br/>(template.agent.tool)
+    participant MCP1 as MCP Client #1<br/>(Tool Loading)
+    participant LLM as Gemini 2.5 Pro<br/>(Reasoning Engine)
+    participant MCP2 as MCP Client #2<br/>(Device List)
+    participant MCP3 as MCP Client #3<br/>(Device Control)
+    participant OXII as OXII IoT Platform
+    participant History as Session History<br/>(Redis)
+
+    Note over Client,History: ⏱️ Case 3: Device Control - Turn On (Complete Workflow)<br/>Total Duration: ~29.91s
+
+    rect rgb(200, 230, 255)
+    Note right of Client: 🕐 04:41:33.697<br/>Request Start
+    Client->>+Router: POST /ai/chat/text<br/>{"sessionId": "testing1234",<br/>"message": "Turn On Light 1 in the bed room."}
+    Note right of Router: 🔑 Token received: eyJhbGciOi...
+    end
+
+    rect rgb(220, 240, 255)
+    Note right of Router: 🕐 04:41:33.703 (+6ms)<br/>Manager Init
+    Router->>+Manager: initialize()<br/>input="Turn On Light 1...", token=JWT
+    Note right of Manager: ✅ Manager initialized<br/>📥 Processing input
+    end
+
+    rect rgb(240, 250, 255)
+    Note right of Manager: 🕐 04:41:33.706 (+9ms)<br/>Analysis Start
+    Manager->>Manager: 🔍 Analyzing query
+    Note right of Manager: 📚 Using 5 messages context
+    
+    Note right of Manager: 🕐 04:41:42.204 (+8.5s)<br/>⏱️ LLM Routing: ~8.5s
+    Manager->>Manager: 🧠 LLM Routing Decision
+    Note right of Manager: 🎯 Decision: "tool"<br/>Confidence: 1.00<br/>Reasoning: Device control command
+    end
+
+    rect rgb(255, 240, 200)
+    Note right of Manager: 🕐 04:41:42.204 (+8.5s)<br/>Tool Agent Init
+    Manager->>+Tool: route_to_tool()
+    Note right of Tool: ⚠️ nest_asyncio warning
+    
+    Tool->>+MCP1: connect_sse()
+    Note right of MCP1: 🕐 04:41:42.205<br/>Connecting to OXII API
+    MCP1->>OXII: GET /sse
+    OXII-->>MCP1: session_id: 2206e1bb56094c5ca12e381a3b8a087e
+    Note right of MCP1: 🕐 04:41:42.952 (+747ms)<br/>Connection established
+    MCP1-->>-Tool: MCP ready
+    
+    Note right of Tool: 🕐 04:41:43.293 (+1.088s)<br/>🔧 Loaded 13 MCP tools
+    Tool->>Manager: Tool Agent loaded
+    Note right of Tool: 🎯 NEW REQUEST received
+    end
+
+    rect rgb(230, 220, 255)
+    Note right of Tool: 🕐 04:41:43.297 (+1.6s)<br/>🧠 ITERATION 0: Reasoning
+    Tool->>+LLM: analyze_request()<br/>SystemMessage + HumanMessage
+    Note right of LLM: 🤔 Planning:<br/>Need device list first
+    
+    Note right of LLM: 🕐 04:41:49.578 (+6.28s)<br/>⏱️ Reasoning: ~6.28s
+    LLM-->>-Tool: tool_calls: [get_device_list]
+    Note right of Tool: 💭 Tool planned: get_device_list
+    end
+
+    rect rgb(200, 255, 230)
+    Note right of Tool: 🕐 04:41:49.579 (+15.88s)<br/>⚙️ Execution: get_device_list (implied)
+    Note right of Tool: Log shows jump to Iteration 1<br/>Assuming get_device_list executed
+    Note right of Tool: Device data retrieved with house/room structure
+    end
+
+    rect rgb(255, 230, 220)
+    Note right of Tool: 🕐 04:41:50.265 (+16.57s)<br/>🧠 ITERATION 1: Control Planning
+    Tool->>+LLM: reason_with_device_data()<br/>Previous: device list<br/>Goal: Turn On Light 1
+    Note right of LLM: 🤔 Analysis:<br/>Đèn 1 (buttonId: 1662)<br/>Action: switch_on_off_controls_v2
+    
+    Note right of LLM: 🕐 04:41:58.043 (+7.78s)<br/>⏱️ Reasoning: ~7.78s
+    LLM-->>-Tool: tool_calls: [switch_on_off_controls_v2]
+    Note right of Tool: 💭 Control command planned
+    end
+
+    rect rgb(220, 255, 255)
+    Note right of Tool: 🕐 04:41:58.043 (+24.35s)<br/>⚙️ Execution: Control Device
+    Note right of Tool: 🚀 Phase 1: Parallel execution
+    
+    Tool->>+MCP3: create_client()
+    Note right of MCP3: 🕐 04:41:58.043<br/>New session for control
+    MCP3->>OXII: GET /sse
+    OXII-->>MCP3: session_id: 3270ee0d07ca4d3084aecd320872e614
+    Note right of MCP3: 🕐 04:41:58.258 (+215ms)
+    MCP3-->>-Tool: Client ready
+    
+    Tool->>+MCP3: call_tool("switch_on_off_controls_v2",<br/>{"data": 1.0, "buttonId": 1662, "token": JWT})
+    Note right of MCP3: 🕐 04:41:58.589<br/>⏳ Invoking control API
+    MCP3->>OXII: POST /messages/<br/>Control command
+    
+    Note right of OXII: 🕐 04:42:00.936 (+2.35s)<br/>Device control executed
+    OXII-->>MCP3: Success: Đèn 1 turned on
+    MCP3-->>-Tool: ✅ Completed
+    
+    Tool->>MCP3: cleanup()
+    Note right of Tool: 🧹 Session closed
+    end
+
+    rect rgb(255, 240, 255)
+    Note right of Tool: 🕐 04:42:00.940 (+27.24s)<br/>🧠 ITERATION 2: Final Response
+    Tool->>+LLM: format_response()<br/>Result: Đèn 1 turned on successfully
+    
+    Note right of LLM: 🕐 04:42:03.604 (+2.66s)<br/>⏱️ Response formatting: ~2.66s
+    LLM-->>-Tool: final_answer: "✅ Command sent successfully"
+    Note right of Tool: 💬 Final output ready
+    end
+
+    rect rgb(220, 255, 220)
+    Note right of Tool: 🕐 04:42:03.607 (+29.91s)<br/>Response Complete
+    Tool-->>-Manager: output="✅ Command to turn on Đèn 1..."
+    Note right of Manager: 📝 Finalizing response
+    Manager->>History: save_conversation()
+    Note right of History: 💾 Saved to session: testing1234
+    
+    Note right of Manager: 🕐 04:42:03.617 (+29.92s)<br/>✅ Processed in 29.91s
+    Manager-->>-Router: response
+    Router-->>-Client: HTTP 200 OK
+    end
+
+    Note over Client,History: 📊 Performance Breakdown:<br/>• Manager LLM routing: 8.5s<br/>• Tool Agent init + MCP: 1.088s<br/>• Iteration 0 reasoning: 6.28s<br/>• Iteration 1 reasoning: 7.78s<br/>• Device control execution: 2.35s<br/>• Iteration 2 response: 2.66s<br/>• Total: 29.91s

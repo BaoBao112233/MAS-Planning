@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router as FastAPI Router<br/>(template.router.v1.ai)
+    participant Manager as Manager Agent<br/>(template.agent.manager)
+    participant Direct as Direct Agent
+    participant History as Session History<br/>(Redis)
+
+    Note over Client,History: ⏱️ Case 1: Simple Greeting Request<br/>Total Duration: ~4.86s
+
+    rect rgb(200, 230, 255)
+    Note right of Client: 🕐 04:38:34.457<br/>Request Start
+    Client->>+Router: POST /ai/chat/text<br/>{"sessionId": "testing1234", "message": "Hello"}
+    Note right of Router: 🔑 Token received: eyJhbGciOi...<br/>JWT validation OK
+    end
+
+    rect rgb(220, 240, 255)
+    Note right of Router: 🕐 04:38:34.481 (+24ms)<br/>Manager Init
+    Router->>+Manager: initialize()<br/>input="Hello", token=JWT
+    Note right of Manager: ✅ Manager Agent initialized successfully<br/>📥 Processing input
+    Note right of Manager: 🔑 Token extracted: userId=103685, orgId=0, country=EN
+    end
+
+    rect rgb(240, 250, 255)
+    Note right of Manager: 🕐 04:38:34.484 (+27ms)<br/>Analysis Start
+    Manager->>Manager: 🔍 Analyzing query: "Hello"
+    Note right of Manager: 📚 Using 1 previous message for context
+    
+    Note right of Manager: 🕐 04:38:39.336 (+4.88s)<br/>⏱️ LLM Processing Time: ~4.85s
+    Manager->>Manager: 🧠 LLM Routing Decision
+    Note right of Manager: 🎯 Decision: "direct"<br/>Confidence: 1.00<br/>📝 Reasoning: Simple greeting,<br/>start of conversation
+    end
+
+    rect rgb(200, 255, 230)
+    Note right of Manager: 🕐 04:38:39.337 (+4.88s)<br/>Direct Agent Routing
+    Manager->>+Direct: route_to_direct(input="Hello")
+    Note right of Manager: 🚀 Routing to direct agent
+    Direct-->>-Manager: "Hi! 👋 How can I help you today?"
+    Note right of Manager: 📝 Finalizing response from direct agent
+    end
+
+    rect rgb(255, 250, 220)
+    Note right of Manager: 🕐 04:38:39.345 (+4.888s)<br/>Finalization
+    Manager->>History: save_conversation(sessionId="testing1234")
+    Note right of History: 💾 Saved conversation to history
+    Manager-->>-Router: response="Hi! 👋..."
+    Note right of Manager: ✅ Request processed successfully in 4.86s
+    end
+
+    rect rgb(220, 255, 220)
+    Note right of Router: 🕐 04:38:39.345 (+4.888s)<br/>Response Complete
+    Router-->>-Client: HTTP 200 OK<br/>{"response": "Hi! 👋..."}
+    Note right of Client: ✅ Total time: 4.888s
+    end
+
+    Note over Client,History: 📊 Performance Breakdown:<br/>• Router handling: 24ms<br/>• Manager init: 3ms<br/>• LLM routing decision: 4.85s (bottleneck)<br/>• Direct agent response: 1ms<br/>• History save + finalize: 8ms

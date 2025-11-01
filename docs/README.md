@@ -22,31 +22,24 @@ Chào mừng bạn đến với bộ tài liệu toàn diện của hệ thống
 - **Strategic Planning**: Tạo kế hoạch automation thông minh
 - **Priority-Based Planning**: 3 loại plan (Security, Convenience, Energy)
 - **Plan Execution**: Orchestration và workflow management
-- **Sub-Agent Integration**: Tích hợp với Meta và Tool Agents
+- **Tool Agent Integration**: Tích hợp với Tool Agent để thực thi tasks
 - **API Integration**: Kết nối với external planning APIs
 
-### [04. Meta Agent](./04_Meta_Agent.md)
-- **Analytical Intelligence**: Engine phân tích và reasoning
-- **Task Decomposition**: Phân tích và chia nhỏ tasks phức tạp
-- **XML Processing**: Xử lý structured data từ LLM responses
-- **Strategic Guidance**: Cung cấp strategic recommendations
-- **Multi-Modal Reasoning**: Các chế độ reasoning khác nhau
-
-### [05. Tool Agent](./05_Tool_Agent.md)
+### [04. Tool Agent](./05_Tool_Agent.md)
 - **Execution Engine**: Thực thi concrete device control actions
 - **MCP Integration**: Tích hợp với Model Context Protocol
 - **Authentication Framework**: Quản lý token-based authentication
 - **Device Coordination**: Điều phối multi-device operations
 - **Error Recovery**: Xử lý lỗi và recovery mechanisms
 
-### [06. MCP Integration & External Services](./06_MCP_Integration_External_Services.md)
+### [05. MCP Integration & External Services](./06_MCP_Integration_External_Services.md)
 - **Model Context Protocol**: Chi tiết về MCP integration
 - **Authentication & Security**: Bảo mật và xác thực
 - **External API Integration**: Tích hợp với OXII API, Google Cloud
 - **Data Storage & Caching**: Redis và session management
 - **Health Check System**: Monitoring và health checking
 
-### [07. Development Guide & Best Practices](./07_Development_Guide.md)
+### [06. Development Guide & Best Practices](./07_Development_Guide.md)
 - **Development Environment**: Setup và configuration
 - **Code Structure**: Organization và coding standards
 - **Testing Strategy**: Unit, integration, và E2E testing
@@ -71,14 +64,10 @@ MAS-Planning là một hệ thống multi-agent automation tiên tiến cho smar
 graph TB
     A[User Input] --> B[Manager Agent]
     B --> C[Plan Agent]
-    B --> D[Meta Agent]
     B --> E[Tool Agent]
     
     C --> F[Priority Planning]
     C --> G[Execution Orchestration]
-    
-    D --> H[Task Analysis]
-    D --> I[Strategic Reasoning]
     
     E --> J[MCP Tools]
     E --> K[Device Control]
@@ -87,11 +76,12 @@ graph TB
     F --> M[Convenience Plan]
     F --> N[Energy Plan]
     
+    G --> E
+    
     J --> O[Smart Home Devices]
     
     style B fill:#e1f5fe
     style C fill:#f3e5f5
-    style D fill:#e8f5e8
     style E fill:#fff3e0
 ```
 
@@ -142,7 +132,7 @@ User Request → Manager Agent → Plan Agent → 3 Priority Plans → User Sele
 
 ### **2. Plan Execution**
 ```
-Selected Plan → Meta Agent Analysis → Tool Agent Execution → Status Updates
+Selected Plan → Plan Agent → Tool Agent Execution → Status Updates
 ```
 
 ### **3. Device Control**

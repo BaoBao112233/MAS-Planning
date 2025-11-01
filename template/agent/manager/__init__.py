@@ -85,9 +85,8 @@ class ManagerAgent(BaseAgent):
         self.verbose = verbose
         self.system_prompt = MANAGER_PROMPT
         
-        # Lazy-loaded sub-agents
+        # Lazy-loaded agents
         self._plan_agent = None
-        self._meta_agent = None
         self._tool_agent = None
         
         # Session state for plan persistence
@@ -137,18 +136,6 @@ class ManagerAgent(BaseAgent):
             
             logger.info("📋 Plan Agent loaded")
         return self._plan_agent
-    
-    @property
-    def meta_agent(self):
-        """Lazy load Meta Agent"""
-        if self._meta_agent is None:
-            from template.agent.meta import MetaAgent
-            self._meta_agent = MetaAgent(
-                llm=self.llm,
-                verbose=self.verbose
-            )
-            logger.info("🧠 Meta Agent loaded")
-        return self._meta_agent
     
     @property
     def tool_agent(self):
@@ -432,10 +419,6 @@ How can I assist you today?"""
                     if delegation_result.get('plan_options'):
                         self._cached_plan_options = delegation_result['plan_options']
                 
-            elif agent_type == 'meta':
-                # Route to Meta Agent
-                delegation_result = self.meta_agent.invoke(user_input)
-                
             elif agent_type == 'tool':
                 # Route to Tool Agent with token
                 token = state.get('token', '')
@@ -680,7 +663,6 @@ How can I assist you today?"""
             'manager_status': 'active',
             'sub_agents': {
                 'plan_agent': self._plan_agent is not None,
-                'meta_agent': self._meta_agent is not None,
                 'tool_agent': self._tool_agent is not None
             },
             'cached_plans': len(self._cached_plan_options) > 0,

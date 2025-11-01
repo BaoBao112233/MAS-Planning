@@ -16,7 +16,6 @@ from template.agent.plan.prompts import (
     CREATE_PLANS_PROMPT,
     UPDATE_PLAN_PROMPTS
 )
-from template.agent.meta import MetaAgent
 from template.agent.tool import ToolAgent
 from template.agent.api_client import APIClient
 from template.configs.environments import env
@@ -70,7 +69,6 @@ class PlanAgent(BaseAgent):
         self.max_iteration = max_iteration
         self.verbose = verbose
         self.api_client = APIClient()
-        self.meta_agent = None
         self.tool_agent = None
         
         # Initialize graph
@@ -523,14 +521,7 @@ class PlanAgent(BaseAgent):
     #     return output
 
     def init_sub_agents(self):
-        """Initialize MetaAgent and ToolAgent when needed"""
-        if self.meta_agent is None:
-            self.meta_agent = MetaAgent(
-                model=self.model,
-                temperature=self.temperature,
-                verbose=self.verbose
-            )
-        
+        """Initialize ToolAgent when needed"""
         if self.tool_agent is None:
             self.tool_agent = ToolAgent(
                 model=self.model,

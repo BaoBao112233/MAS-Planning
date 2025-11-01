@@ -118,7 +118,6 @@ def _context_aware_fallback_routing(self, query: str) -> str:
 **Routing Strategy:**
 - **Plan Agent**: Plan creation, selection, automation requests
 - **Tool Agent**: Device control, immediate actions
-- **Meta Agent**: Analysis, reasoning, complex questions  
 - **Direct Response**: Information queries, help requests
 
 ### **3. Agent Delegation Framework**

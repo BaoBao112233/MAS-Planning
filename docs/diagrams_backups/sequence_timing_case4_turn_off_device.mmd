@@ -1,0 +1,91 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router as FastAPI Router<br/>(template.router.v1.ai)
+    participant Manager as Manager Agent<br/>(template.agent.manager)
+    participant Tool as Tool Agent<br/>(template.agent.tool)
+    participant MCP as MCP Client<br/>(SSE Connection)
+    participant LLM as Gemini 2.5 Pro<br/>(Reasoning Engine)
+    participant OXII as OXII IoT Platform
+    participant History as Session History<br/>(Redis)
+
+    Note over Client,History: ⏱️ Case 4: Device Control - Turn Off (Optimized)<br/>Total Duration: ~22.32s
+
+    rect rgb(200, 230, 255)
+    Note right of Client: 🕐 04:42:33.592<br/>Request Start
+    Client->>+Router: POST /ai/chat/text<br/>{"sessionId": "testing1234",<br/>"message": "Turn off Light 1 in the bed room"}
+    Note right of Router: 🔑 Token received: eyJhbGciOi...
+    end
+
+    rect rgb(220, 240, 255)
+    Note right of Router: 🕐 04:42:33.611 (+19ms)<br/>Manager Init
+    Router->>+Manager: initialize()<br/>input="Turn off Light 1...", token=JWT
+    Note right of Manager: ✅ Manager initialized<br/>📥 Processing input
+    end
+
+    rect rgb(240, 250, 255)
+    Note right of Manager: 🕐 04:42:33.620 (+28ms)<br/>Analysis Start
+    Manager->>Manager: 🔍 Analyzing query
+    Note right of Manager: 📚 Using 6 messages context<br/>(includes previous Turn On command)
+    
+    Note right of Manager: 🕐 04:42:36.471 (+2.85s)<br/>⏱️ LLM Routing: ~2.85s (faster!)
+    Manager->>Manager: 🧠 LLM Routing Decision
+    Note right of Manager: 🎯 Decision: "tool"<br/>Confidence: 1.00<br/>Reasoning: Direct device control
+    end
+
+    rect rgb(255, 240, 200)
+    Note right of Manager: 🕐 04:42:36.472 (+2.88s)<br/>Tool Agent Init
+    Manager->>+Tool: route_to_tool()
+    Note right of Tool: ⚠️ nest_asyncio warning
+    
+    Tool->>+MCP: connect_sse()
+    Note right of MCP: 🕐 04:42:36.473<br/>Connecting to OXII API
+    MCP->>OXII: GET /sse
+    OXII-->>MCP: session_id: 0694dd40e3304fb99a5d592a47b6a723
+    Note right of MCP: 🕐 04:42:36.690 (+217ms)<br/>Connection faster
+    MCP-->>-Tool: MCP ready
+    
+    Note right of Tool: 🕐 04:42:37.013 (+540ms)<br/>🔧 Loaded 13 MCP tools
+    Tool->>Manager: Tool Agent loaded
+    Note right of Tool: 🎯 NEW REQUEST received
+    end
+
+    rect rgb(230, 220, 255)
+    Note right of Tool: 🕐 04:42:37.013 (+3.42s)<br/>🧠 Optimized Processing
+    Note right of Tool: ⚠️ Log detail missing<br/>but execution completes faster
+    Tool->>+LLM: process_with_context()<br/>Context: Previous "Turn On" execution<br/>Known device: Đèn 1 (buttonId: 1662)
+    Note right of LLM: 🚀 Optimization:<br/>- Device already known from context<br/>- Skip redundant get_device_list<br/>- Direct control execution
+    end
+
+    rect rgb(220, 255, 255)
+    Note right of LLM: 🕐 04:42:55.930 (+18.92s)<br/>⏱️ Processing: ~18.92s
+    LLM-->>-Tool: Execute switch_on_off_controls_v2<br/>{"data": 0.0, "buttonId": 1662}
+    
+    Tool->>+MCP: call_tool("switch_on_off_controls_v2")
+    Note right of MCP: Direct execution<br/>No intermediate steps
+    MCP->>OXII: POST /messages/<br/>Control command (OFF)
+    
+    OXII-->>MCP: Success: Light 1 turned off
+    MCP-->>-Tool: ✅ Completed
+    
+    Tool->>MCP: cleanup()
+    Note right of Tool: 🧹 Session closed
+    end
+
+    rect rgb(255, 240, 255)
+    Note right of Tool: 🕐 04:42:55.930 (+22.34s)<br/>Final Response
+    Tool-->>-Manager: output="✅ Command to turn off Light 1..."
+    Note right of Manager: 📝 Finalizing response
+    end
+
+    rect rgb(220, 255, 220)
+    Note right of Manager: 🕐 04:42:55.939 (+22.35s)<br/>Response Complete
+    Manager->>History: save_conversation()
+    Note right of History: 💾 Saved to session: testing1234
+    
+    Note right of Manager: ✅ Processed in 22.32s<br/>(7.59s faster than Turn On!)
+    Manager-->>-Router: response
+    Router-->>-Client: HTTP 200 OK
+    end
+
+    Note over Client,History: 📊 Performance Comparison vs Case 3:<br/>• Manager routing: 2.85s (vs 8.5s, -66% ⚡)<br/>• Tool Agent init: 540ms (vs 1.088s, -50% ⚡)<br/>• Processing: ~18.92s (optimized, skip device list)<br/>• Total: 22.32s (vs 29.91s, -25% improvement ⚡)<br/><br/>🎯 Key Optimization: Context-aware execution<br/>• Reuses device info from previous interaction<br/>• Skips redundant get_device_list call<br/>• Direct control command execution

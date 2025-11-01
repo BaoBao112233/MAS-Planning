@@ -1,22 +1,95 @@
 sequenceDiagram
-    autonumber
+    actor User
     participant Client
     participant Router
-    participant Manager
-    participant ToolAgent
-    participant MCP
-    participant History
+    participant Manager as Manager Agent
+    participant Tool as Tool Agent
+    participant Redis as Chat History
+    participant LLM as Gemini 2.5 Pro
+    participant MCP as OXII MCP Server
 
-    Client->>Router: "Turn off Light 1 in the bed room" + Token
-    Router->>Manager: Forward message
-    Manager->>Manager: Analyze → Device Control
-    critical AI Routing
-        Manager->>Manager: Route to ToolAgent (confidence 1.00)
+    Note over User,MCP: Case 4: Turn Off Device (Optimized) - Fast Execution<br/>Total: 22.32s (04:42:33 → 04:42:55)
+
+    %% Request Phase
+    User->>Client: "Turn off Light 1 in the bed room"
+    Client->>Router: POST /ai/chat/text
+    activate Router
+
+    %% Manager Processing
+    Router->>Manager: {input, token, sessionId}
+    activate Manager
+    Note over Manager: 04:42:33.611<br/>⚡ Init: 0.019s
+
+    rect rgb(200, 220, 240)
+        Note over Manager,LLM: 🔍 ANALYZE_QUERY
+        Manager->>Redis: Load context
+        activate Redis
+        Redis-->>Manager: 6 previous messages<br/>(including Cases 1-3)
+        deactivate Redis
+        Note over Manager: 04:42:33.620<br/>📚 Context: Recent turn-on cmd
+
+        Manager->>LLM: Analyze with rich context
+        activate LLM
+        Note over LLM: 04:42:33.620 → 04:42:36.471<br/>⏱️ 2.851s (FASTER than Case 3)
+        LLM-->>Manager: agent_type: tool<br/>confidence: 1.00
+        deactivate LLM
+        Note over Manager: 04:42:36.471<br/>🎯 Route to Tool Agent
     end
-    Manager->>ToolAgent: Initialize ToolAgent + token
-    ToolAgent->>MCP: Connect via SSE (OXII API)
-    MCP-->>ToolAgent: Return endpoint URL
-    ToolAgent->>ToolAgent: Execute command
-    ToolAgent-->>Manager: ✅ Command executed
-    Manager->>History: Save log
-    Router-->>Client: OK (22.3s)
+
+    rect rgb(220, 240, 200)
+        Note over Manager,MCP: 🚀 DELEGATE to Tool Agent
+        Manager->>Tool: Initialize ToolAgent<br/>{input, token}
+        activate Tool
+        
+        Tool->>MCP: Connect SSE<br/>session: 0694dd40...
+        activate MCP
+        MCP-->>Tool: Load 13 tools
+        deactivate MCP
+        Note over Tool: 04:42:37.013<br/>⚡ Init: 0.540s
+    end
+
+    rect rgb(240, 230, 220)
+        Note over Tool,MCP: 🧠 OPTIMIZED PROCESSING
+        Note over Tool: 04:42:37.013 → 04:42:55.930<br/>⏱️ 18.917s<br/><br/>⚠️ Logs missing detailed phases<br/>Likely optimized execution:
+
+        Tool->>LLM: Reasoning (fewer iterations)<br/>Uses context from Case 3
+        activate LLM
+        LLM-->>Tool: Optimized plan<br/>(skip get_device_list?)
+        deactivate LLM
+        
+        Tool->>MCP: switch_on_off_controls_v2<br/>buttonId: 1662, data: 0.0<br/>(turn OFF)
+        activate MCP
+        Note over MCP: Device control execution
+        MCP-->>Tool: ✅ "Light 1 turned off"
+        deactivate MCP
+        
+        Tool->>LLM: Quick finalize
+        activate LLM
+        LLM-->>Tool: Final output
+        deactivate LLM
+        
+        Note over Tool: Context-aware optimization<br/>reduced redundant steps
+    end
+
+    Tool-->>Manager: {output, success: true}
+    deactivate Tool
+
+    rect rgb(240, 220, 200)
+        Note over Manager: 📝 FINALIZE
+        Manager->>Manager: format_tool_response()
+        Note over Manager: 04:42:55.930<br/>Final: "Command sent successfully"
+    end
+
+    Manager->>Redis: Save conversation
+    activate Redis
+    Redis-->>Manager: ✅ Saved
+    deactivate Redis
+
+    Manager-->>Router: Success (22.32s)
+    deactivate Manager
+    Router-->>Client: HTTP 200
+    deactivate Router
+    Client-->>User: "Light 1 tắt"
+
+    %% Timing Breakdown
+    Note over User,MCP: ⏱️ Timing Breakdown:<br/>• Manager Analysis (LLM): 2.851s ✅ FASTER<br/>• Tool Init (MCP): 0.540s<br/>• Tool Processing: 18.917s (optimized)<br/>  └─ Fewer LLM iterations<br/>  └─ Skip redundant get_device_list?<br/>  └─ Direct control execution<br/>• Finalization: 0.009s<br/>• Total: 22.32s<br/><br/>🎯 Optimization: 25% faster than Case 3 (29.91s)<br/>💡 Reason: Context from previous interactions<br/>🔴 Bottleneck: Still LLM-dominated but improved<br/>📊 Architecture: Manager→Tool (context-aware)

@@ -1,0 +1,97 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router as FastAPI Router<br/>(template.router.v1.ai)
+    participant Manager as Manager Agent<br/>(template.agent.manager)
+    participant Tool as Tool Agent<br/>(template.agent.tool)
+    participant MCP1 as MCP Client #1<br/>(SSE Connection)
+    participant LLM as Gemini 2.5 Pro<br/>(Reasoning Engine)
+    participant MCP2 as MCP Client #2<br/>(Tool Execution)
+    participant OXII as OXII IoT Platform<br/>(https://oxii-iotp-mcp.smarthiz.com)
+    participant History as Session History<br/>(Redis)
+
+    Note over Client,History: ⏱️ Case 2: Device Control Request<br/>Total Duration: ~16s
+
+    rect rgb(200, 230, 255)
+    Note right of Client: 🕐 04:39:10.000<br/>Request Start
+    Client->>+Router: POST /ai/chat/text<br/>{"sessionId": "testing1234",<br/>"message": "Turn On Light 1 in the bed room."}
+    Note right of Router: 🔑 Token received: eyJhbGciOi...<br/>JWT validation OK
+    end
+
+    rect rgb(220, 240, 255)
+    Note right of Router: 🕐 04:39:10.000 (instant)<br/>Manager Init
+    Router->>+Manager: initialize()<br/>input="Turn On Light 1...", token=JWT
+    Note right of Manager: ✅ Manager Agent initialized successfully<br/>📥 Processing input
+    Note right of Manager: 🔑 Token extracted: userId=103685
+    end
+
+    rect rgb(240, 250, 255)
+    Note right of Manager: 🕐 04:39:10.000 (instant)<br/>Analysis Start
+    Manager->>Manager: 🔍 Analyzing query
+    Note right of Manager: 📚 Using 5 previous messages for context
+    
+    Note right of Manager: 🕐 04:39:20.000 (+10s)<br/>⏱️ LLM Routing Time: ~10s
+    Manager->>Manager: 🧠 LLM Routing Decision
+    Note right of Manager: 🎯 Decision: "tool"<br/>Confidence: 1.00<br/>📝 Reasoning: Device control command,<br/>requires OXII API interaction
+    end
+
+    rect rgb(255, 240, 200)
+    Note right of Manager: 🕐 04:39:20.000 (+10s)<br/>Tool Agent Initialization
+    Manager->>+Tool: route_to_tool(input="Turn On Light 1...", token=JWT)
+    Note right of Tool: ⚠️ Warning: nest_asyncio not installed
+    
+    Tool->>+MCP1: connect_sse()
+    Note right of MCP1: 🕐 04:39:20.000<br/>Connecting to SSE endpoint
+    MCP1->>OXII: GET /sse<br/>(Establish MCP connection)
+    OXII-->>MCP1: session_id: aae963778ccf4abab04a7f20b1cb7035
+    Note right of MCP1: ✅ Received endpoint URL<br/>Starting post writer
+    MCP1-->>-Tool: MCP connection ready
+    
+    Note right of Tool: 🕐 04:39:20.000 (instant)<br/>🔧 Loaded 13 MCP tools
+    Tool->>Manager: ✅ Tool Agent loaded
+    Note right of Tool: 🎯 NEW REQUEST received
+    end
+
+    rect rgb(230, 220, 255)
+    Note right of Tool: 🕐 04:39:20.000 (instant)<br/>🧠 REASONING PHASE (Iteration 0)
+    Tool->>+LLM: analyze_request()<br/>SystemMessage: 13 tool definitions<br/>HumanMessage: "Turn On Light 1..."
+    Note right of LLM: 🤔 Pattern Recognition:<br/>Device control requires:<br/>1. get_device_list (find device ID)<br/>2. switch_on_off_controls_v2 (control)
+    
+    Note right of LLM: 🕐 04:39:26.000 (+6s)<br/>⏱️ LLM Reasoning: ~6s
+    LLM-->>-Tool: tool_calls: [get_device_list]
+    Note right of Tool: 💭 LLM Response received<br/>🔧 Tool calls planned: 1<br/>→ get_device_list({'token': '<TOKEN>'})
+    end
+
+    rect rgb(200, 255, 230)
+    Note right of Tool: 🕐 04:39:26.000 (+16s)<br/>⚙️ EXECUTION PHASE
+    Note right of Tool: 📋 Phase 2a: Executing 1 prerequisite tool
+    
+    Tool->>Tool: ⏳ Creating fresh MCP client
+    Tool->>+MCP2: connect_sse()
+    Note right of MCP2: 🕐 04:39:26.000<br/>New SSE connection for tool execution
+    MCP2->>OXII: GET /sse
+    OXII-->>MCP2: session_id: e19a5acad35f4cbb840ee27dfff8409c
+    MCP2-->>-Tool: MCP client ready
+    
+    Tool->>+MCP2: call_tool("get_device_list",<br/>{"token": "eyJhbGciOi..."})
+    Note right of MCP2: ⏳ Invoking get_device_list...
+    MCP2->>OXII: POST /messages/?session_id=e19a5aca...<br/>{"method": "tools/call",<br/>"params": {"name": "get_device_list"}}
+    
+    Note right of OXII: 🏠 Processing device query<br/>Fetching house/room structure
+    OXII-->>MCP2: [device data with house/room structure]<br/>{"houses": [...], "devices": [...]}
+    MCP2-->>-Tool: ✅ get_device_list completed
+    Note right of Tool: ✅ Execution complete. Total results: 1
+    
+    Tool->>MCP2: cleanup()
+    Note right of Tool: 🧹 Cleaned up MCP client
+    end
+
+    rect rgb(255, 220, 220)
+    Note right of Tool: 🕐 04:39:26.000+ (+16s+)<br/>🔄 NEXT ITERATION EXPECTED
+    Note right of Tool: Expected Flow:<br/>Iteration 1: Reasoning Phase<br/>→ LLM analyzes device list<br/>→ Plans switch_on_off_controls_v2<br/>→ Execution Phase<br/>→ Control Light 1<br/>→ Final response
+    
+    Tool-->>Manager: [iteration continues...]
+    Note right of Manager: ⏳ Waiting for final response
+    end
+
+    Note over Client,History: 📊 Performance Breakdown (Phase 1):<br/>• Manager LLM routing: 10s (bottleneck #1)<br/>• Tool Agent init + MCP connect: ~0s (instant)<br/>• Tool Agent LLM reasoning: 6s (bottleneck #2)<br/>• get_device_list execution: ~0s (instant)<br/>• Total so far: ~16s (incomplete)
