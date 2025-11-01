@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router
+    participant Manager
+    participant ToolAgent
+    participant MCP
+    participant History
+
+    Client->>Router: "Turn off Light 1 in the bed room" + Token
+    Router->>Manager: Forward message
+    Manager->>Manager: Analyze → Device Control
+    critical AI Routing
+        Manager->>Manager: Route to ToolAgent (confidence 1.00)
+    end
+    Manager->>ToolAgent: Initialize ToolAgent + token
+    ToolAgent->>MCP: Connect via SSE (OXII API)
+    MCP-->>ToolAgent: Return endpoint URL
+    ToolAgent->>ToolAgent: Execute command
+    ToolAgent-->>Manager: ✅ Command executed
+    Manager->>History: Save log
+    Router-->>Client: OK (22.3s)

@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router
+    participant Manager
+    participant ToolAgent
+    participant MCP
+    participant History
+
+    Client->>Router: "Turn On Light 1 in the bed room."
+    Router->>Manager: Forward input
+    Manager->>Manager: Context: 5 previous messages
+    Manager->>Manager: Route to Tool Agent
+    Manager->>ToolAgent: Initialize Tool Agent with token
+    ToolAgent->>MCP: get_device_list()
+    MCP-->>ToolAgent: Return devices
+    ToolAgent->>ToolAgent: Execute switch_on_off_controls_v2
+    ToolAgent-->>Manager: ✅ Device On Success
+    Manager->>History: Save conversation
+    Router-->>Client: 200 OK (29.9s)

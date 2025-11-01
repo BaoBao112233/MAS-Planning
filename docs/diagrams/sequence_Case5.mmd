@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router
+    participant Manager
+    participant PlanAgent as template.agent.plan
+    participant MCP
+    participant APIClient as template.agent.api_client
+    participant History
+
+    Client->>Router: "Have 1 person in Bed room. Temp 20C. Create Plan."
+    Router->>Manager: Forward message + token
+    activate Manager
+    Manager->>Manager: Analyze → intent = Create Plan
+    critical AI Routing
+        Manager->>Manager: Route to PlanAgent (confidence 1.00)
+    end
+    Manager->>PlanAgent: Initialize Plan Agent (LLM + MCP tools)
+    PlanAgent->>MCP: Retrieve device list (13 MCP tools)
+    MCP-->>PlanAgent: Device data (6 rooms)
+    PlanAgent->>PlanAgent: Generate 3 plans (Security, Convenience, Energy)
+    PlanAgent-->>Manager: Return plans summary
+    Manager->>History: Save conversation
+    deactivate Manager
+    Router-->>Client: Return 3 plan options (45.39s)
+
+    %% Step 2: User selects a plan
+    Client->>Router: "Plan 1"
+    Router->>Manager: Forward input
+    Manager->>Manager: Analyze history → Route to PlanAgent
+    Manager->>PlanAgent: Load cached plan options
+    PlanAgent->>APIClient: Create Plan (Security_Priority)
+    APIClient-->>PlanAgent: Plan ID + Tasks IDs
+    critical Plan Execution
+        PlanAgent->>ToolAgent: Execute 3 tasks (turn off/on devices)
+    end
+    PlanAgent-->>Manager: ✅ Plan running successfully
+    Manager->>History: Save results
+    Router-->>Client: Confirm execution

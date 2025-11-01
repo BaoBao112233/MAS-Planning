@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Router as template.router.v1.ai
+    participant Manager as template.agent.manager
+    participant DirectAgent as direct.agent
+    participant History as Conversation History
+
+    Client->>Router: Gửi message "Hello" + Token JWT
+    Router->>Router: Nhận sessionId: testing1234
+    Router->>Manager: Gửi input {"input": "Hello", "token": "<JWT>"}
+    activate Manager
+    Manager->>Manager: Xác thực token
+    Manager->>Manager: Phân tích truy vấn "Hello"
+    Manager->>Manager: Sử dụng 1 message trước đó làm ngữ cảnh
+    Manager->>Manager: Quyết định định tuyến: direct (confidence: 1.00)
+    Manager->>DirectAgent: Gửi truy vấn tới Direct Agent
+    DirectAgent-->>Manager: Trả phản hồi lời chào
+    Manager->>History: Ghi lịch sử hội thoại (session: testing1234)
+    deactivate Manager
+    Manager-->>Router: Hoàn tất xử lý (✅ success, 4.86s)
+    Router-->>Client: Trả về phản hồi "Hello" (OK 200)
