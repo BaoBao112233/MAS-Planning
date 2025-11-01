@@ -551,7 +551,7 @@ class PlanAgent(BaseAgent):
                 logger.warning(colored(f"⚠️ Could not init ToolAgent async: {e}", 'yellow'))
 
     def execute_selected_plan(self, state: PlanState):
-        """Execute selected plan with status updates"""
+        """Execute selected plan with PARALLEL task execution using ThreadPoolExecutor"""
         selected_plan_id = state.get('selected_plan_id')
         plan_options = state.get('plan_options', {})
         
@@ -600,42 +600,49 @@ class PlanAgent(BaseAgent):
         # Initialize sub-agents
         self.init_sub_agents()
         
-        # Execute plan
+        # Prepare for parallel execution
+        import concurrent.futures
+        import threading
+        
+        # Thread-safe data structures
         execution_results = []
         completed_tasks = []
         failed_tasks = []
+        results_lock = threading.Lock()
         
-        try:
-            for i, task in enumerate(selected_plan, 1):
-                logger.info(colored(f"\n🚀 Executing Task {i}/{len(selected_plan)}: {task}", "cyan", attrs=["bold"]))
+        def execute_single_task(task_info):
+            """Execute a single task in a separate thread"""
+            task_number, task = task_info
+            token = state.get('token', '')
+            
+            try:
+                # Log task start (thread-safe)
+                logger.info(colored(f"\n🚀 [Thread-{threading.current_thread().name}] Executing Task {task_number}/{len(selected_plan)}: {task}", "cyan", attrs=["bold"]))
                 
                 if self.api_client:
-                    self.api_client.update_task_status(task, "in_progress")
+                    with results_lock:
+                        self.api_client.update_task_status(task, "in_progress")
                 
-                # Execute task with ToolAgent
-                token = state.get('token', '')
-                try:
-                    # Use ainvoke with proper async handling
-                    import concurrent.futures
-                    
-                    def call_tool_agent(input_data):
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            return loop.run_until_complete(self.tool_agent.ainvoke(input_data))
-                        finally:
-                            loop.close()
-                    
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(call_tool_agent, {"input": task, "token": token})
-                        tool_result = future.result(timeout=30)  # 30 second timeout
-                    
-                    tool_output = tool_result.get('output', '')
-                    has_error = tool_result.get('error', '')
-                    
+                # Create new event loop for this thread
+                def call_tool_agent(input_data):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(self.tool_agent.ainvoke(input_data))
+                    finally:
+                        loop.close()
+                
+                # Execute tool agent
+                tool_result = call_tool_agent({"input": task, "token": token})
+                
+                tool_output = tool_result.get('output', '')
+                has_error = tool_result.get('error', '')
+                
+                # Thread-safe result collection
+                with results_lock:
                     if tool_output and not has_error:
                         execution_results.append({
-                            "task_number": i,
+                            "task_number": task_number,
                             "task": task,
                             "tool_execution": tool_output,
                             "status": "completed"
@@ -645,11 +652,12 @@ class PlanAgent(BaseAgent):
                         if self.api_client:
                             self.api_client.update_task_status(task, "completed", tool_output)
                         
-                        logger.info(colored(f"✅ Task {i} completed", "green"))
+                        logger.info(colored(f"✅ [Thread-{threading.current_thread().name}] Task {task_number} completed", "green"))
+                        return ("success", task_number, task, tool_output)
                     else:
                         error_msg = has_error or 'Unknown error'
                         execution_results.append({
-                            "task_number": i,
+                            "task_number": task_number,
                             "task": task,
                             "tool_execution": error_msg,
                             "status": "failed"
@@ -659,12 +667,15 @@ class PlanAgent(BaseAgent):
                         if self.api_client:
                             self.api_client.update_task_status(task, "failed", error_msg)
                         
-                        logger.error(colored(f"❌ Task {i} failed: {error_msg}", "red"))
+                        logger.error(colored(f"❌ [Thread-{threading.current_thread().name}] Task {task_number} failed: {error_msg}", "red"))
+                        return ("failed", task_number, task, error_msg)
                         
-                except concurrent.futures.TimeoutError:
-                    error_msg = "Task execution timed out after 30 seconds"
+            except Exception as e:
+                error_msg = f"Task execution error: {str(e)}"
+                
+                with results_lock:
                     execution_results.append({
-                        "task_number": i,
+                        "task_number": task_number,
                         "task": task,
                         "tool_execution": error_msg,
                         "status": "failed"
@@ -674,24 +685,55 @@ class PlanAgent(BaseAgent):
                     if self.api_client:
                         self.api_client.update_task_status(task, "failed", error_msg)
                     
-                    logger.error(colored(f"❌ Task {i} timeout: {error_msg}", "red"))
-                except Exception as e:
-                    error_msg = f"Task execution error: {str(e)}"
-                    execution_results.append({
-                        "task_number": i,
-                        "task": task,
-                        "tool_execution": error_msg,
-                        "status": "failed"
-                    })
-                    failed_tasks.append(task)
-                    
-                    if self.api_client:
-                        self.api_client.update_task_status(task, "failed", error_msg)
-                    
-                    logger.error(colored(f"❌ Task {i} exception: {str(e)}", "red"))
+                    logger.error(colored(f"❌ [Thread-{threading.current_thread().name}] Task {task_number} exception: {str(e)}", "red"))
+                    return ("error", task_number, task, error_msg)
         
+        # Execute all tasks in parallel
+        try:
+            num_tasks = len(selected_plan)
+            logger.info(colored(f"\n🔥 Starting PARALLEL execution with {num_tasks} threads", "magenta", attrs=["bold"]))
+            
+            # Create ThreadPoolExecutor with number of workers = number of tasks
+            with concurrent.futures.ThreadPoolExecutor(max_workers=num_tasks) as executor:
+                # Prepare task info: (task_number, task)
+                tasks_with_numbers = [(i+1, task) for i, task in enumerate(selected_plan)]
+                
+                # Submit all tasks to executor
+                futures = {
+                    executor.submit(execute_single_task, task_info): task_info 
+                    for task_info in tasks_with_numbers
+                }
+                
+                # Wait for all tasks to complete with timeout
+                completed_futures = concurrent.futures.wait(
+                    futures, 
+                    timeout=60,  # 60 seconds total timeout for all tasks
+                    return_when=concurrent.futures.ALL_COMPLETED
+                )
+                
+                # Handle timed out tasks
+                if completed_futures.not_done:
+                    logger.warning(colored(f"⚠️ {len(completed_futures.not_done)} tasks timed out", "yellow"))
+                    for future in completed_futures.not_done:
+                        task_info = futures[future]
+                        task_number, task = task_info
+                        
+                        with results_lock:
+                            execution_results.append({
+                                "task_number": task_number,
+                                "task": task,
+                                "tool_execution": "Task execution timed out after 60 seconds",
+                                "status": "failed"
+                            })
+                            failed_tasks.append(task)
+                            
+                            if self.api_client:
+                                self.api_client.update_task_status(task, "failed", "Timeout")
+                
+                logger.info(colored(f"\n✨ All tasks completed/timed out", "magenta", attrs=["bold"]))
+                
         except Exception as e:
-            logger.error(colored(f"❌ Critical error: {str(e)}", "red", attrs=["bold"]))
+            logger.error(colored(f"❌ Critical error in parallel execution: {str(e)}", "red", attrs=["bold"]))
         
         # Finalize
         total_tasks = len(selected_plan)
