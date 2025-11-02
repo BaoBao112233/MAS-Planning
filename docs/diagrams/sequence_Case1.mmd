@@ -1,64 +1,71 @@
 sequenceDiagram
     actor User
     participant Client
-    participant Router
-    participant Manager as Manager Agent
-    participant Redis as Chat History (Redis)
+    participant Router as FastAPI Router
+    participant Manager as Manager Agent<br/>(StateGraph)
+    participant Redis as Redis<br/>Chat History
     participant LLM as Gemini 2.5 Pro
 
-    Note over User,LLM: Case 1: Simple Greeting - Manager Internal Direct Response<br/>Total: 4.86s (04:38:34 → 04:38:39)
+    Note over User,LLM: Case 1: Simple Greeting Query "hi"<br/>Flow: User → Manager (analyze → route internally) → Response<br/>Total Time: ~4.44s
 
-    %% Request Phase
-    User->>Client: "Hello"
-    Client->>Router: POST /ai/chat/text<br/>message: "Hello"<br/>token: JWT<br/>sessionId: testing1234
-    activate Router
-    Note over Router: 04:38:34.457<br/>Token validation
+    %% === REQUEST PHASE ===
+    User->>Client: "hi"
+    Client->>+Router: POST /ai/chat/text<br/>{message: "hi",<br/>sessionId: "testing1234",<br/>token: "testing123..."}
+    Note over Router: 2025-11-02 03:31:17<br/>⚙️ Validate token & session
 
-    %% Manager Initialization
-    Router->>Manager: Initialize & Process<br/>{input: "Hello", token}
-    activate Manager
-    Note over Manager: 04:38:34.481<br/>⚡ Init: 0.024s<br/>Manager Agent ready
-    
+    %% === MANAGER INITIALIZATION ===
+    Router->>+Manager: Initialize & Process<br/>{input: "hi", token}
+    Note over Manager: ✅ Manager Agent<br/>initialized successfully
+
+    %% === ANALYZE_QUERY NODE ===
     rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY NODE
-        Manager->>Redis: Load conversation context
-        activate Redis
-        Redis-->>Manager: 1 previous message
-        deactivate Redis
-        Note over Manager: 04:38:34.484<br/>📚 Context loaded
+        Note over Manager,LLM: 🔍 NODE 1: analyze_query
+        
+        Manager->>+Redis: Load conversation context
+        Note over Redis: Error connecting to<br/>mas-redis-cache:8379<br/>(Connection refused)
+        Redis-->>-Manager: Empty context (fallback)
+        
+        Note over Manager: 📚 Using 1 previous<br/>messages for context
 
-        Manager->>LLM: Analyze query with MANAGER_PROMPT<br/>"Hello" + context
-        activate LLM
-        Note over LLM: 04:38:34.484 → 04:38:39.336<br/>⏱️ LLM Routing Decision: ~4.852s<br/>(BOTTLENECK - Gemini 2.5 Pro)
-        LLM-->>Manager: reasoning: Simple greeting<br/>agent_type: direct<br/>confidence: 1.00<br/>direct_answer: Greeting text
-        deactivate LLM
-        Note over Manager: 04:38:39.336<br/>🎯 Routing: agent_type="direct"
+        Manager->>+LLM: Invoke with MANAGER_PROMPT<br/>+ User query: "hi"<br/>+ Conversation history
+        Note over LLM: Gemini 2.5 Pro analyzing...<br/>⏱️ ~4 seconds
+        LLM-->>-Manager: {<br/>  reasoning: "Simple greeting",<br/>  agent_type: "direct",<br/>  confidence: 1.00,<br/>  direct_answer: "Hello! I can help..."<br/>}
+        
+        Note over Manager: 🎯 Routing decision: direct<br/>confidence: 1.00
     end
 
+    %% === DELEGATE NODE (Internal) ===
     rect rgb(220, 240, 200)
-        Note over Manager: 🚀 DELEGATE NODE (Internal Direct Handler)
-        Manager->>Manager: route_to_agent(state)<br/>agent_type == 'direct'<br/>→ Handle internally
-        Note over Manager: 04:38:39.337<br/>Extract direct_answer from<br/>reasoning_result<br/>(No external agent call)
-        Note over Manager: delegation_result = {<br/>  'output': direct_answer,<br/>  'agent_type': 'direct',<br/>  'success': True<br/>}
+        Note over Manager: 🚀 NODE 2: delegate<br/>(Internal Direct Handler)
+        
+        Manager->>Manager: route_to_agent(state)<br/>if agent_type == "direct":<br/>  return direct_answer
+        
+        Note over Manager: ⚡ No external agent call<br/>Handle response internally<br/>(No separate Direct Agent)
+        
+        Note over Manager: delegation_result = {<br/>  output: "Hello! I can help...",<br/>  agent_type: "direct",<br/>  success: True<br/>}
     end
 
+    %% === FINALIZE NODE ===
     rect rgb(240, 220, 200)
-        Note over Manager: 📝 FINALIZE NODE
-        Manager->>Manager: finalize_response(state)<br/>format_final_response()
-        Note over Manager: 04:38:39.337<br/>📄 Final output formatted:<br/>"🤖 Smart Home Assistant<br/>I can help you with..."
+        Note over Manager: 📝 NODE 3: finalize_response
+        
+        Manager->>Manager: format_final_response()<br/>Add formatting & metadata
+        
+        Note over Manager: Final output:<br/>"Hello! I can help you with<br/>smart home automation..."
     end
 
-    Manager->>Redis: Save conversation<br/>(user + AI messages)
-    activate Redis
-    Redis-->>Manager: ✅ Saved to session
-    deactivate Redis
-    Note over Manager: 04:38:39.345<br/>💾 History updated
+    %% === SAVE HISTORY ===
+    Manager->>+Redis: Save conversation<br/>(user message + AI response)
+    Note over Redis: Error saving to Redis<br/>(Connection refused)
+    Redis-->>-Manager: Save to local fallback
+    Note over Manager: 💾 Saved conversation<br/>to history (session: testing1234)
 
-    Manager-->>Router: Success response<br/>Total time: 4.86s
-    deactivate Manager
-    Router-->>Client: HTTP 200 OK<br/>response text
-    deactivate Router
-    Client-->>User: Display greeting
+    %% === RESPONSE ===
+    Manager-->>-Router: {<br/>  output: "Hello! I can help...",<br/>  processing_time: 4.44s<br/>}
+    Note over Manager: ✅ Request processed<br/>successfully in 4.44s
 
-    %% Timing Breakdown
-    Note over User,LLM: ⏱️ Timing Breakdown:<br/>• Router → Manager Init: 0.024s<br/>• ANALYZE_QUERY (LLM): 4.852s ⚠️ BOTTLENECK<br/>  └─ Load context: ~0.003s<br/>  └─ Gemini LLM call: ~4.849s<br/>• DELEGATE (internal): 0.001s<br/>• FINALIZE: 0.001s<br/>• Save history: 0.008s<br/>• Total: 4.86s<br/><br/>💡 Key: Manager handles "direct" responses internally<br/>NO separate Direct Agent exists
+    Router-->>-Client: HTTP 200 OK<br/>{"response": "Hello! I can..."}
+    Client-->>User: Display greeting response
+
+    %% === TIMING BREAKDOWN ===
+    Note over User,LLM: ⏱️ Timing Breakdown (Total: 4.44s)<br/><br/>• Manager initialization: <0.1s<br/>• Redis context load: ~0.01s (failed)<br/>• LLM routing decision: ~4.0s ⚠️ BOTTLENECK<br/>• Internal direct handling: <0.01s<br/>• Response formatting: <0.01s<br/>• Redis save: ~0.01s (failed)<br/><br/>💡 Key Insight: Manager handles "direct"<br/>responses internally - NO separate<br/>Direct Agent exists in the system

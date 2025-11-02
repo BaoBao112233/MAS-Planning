@@ -1,84 +1,102 @@
 sequenceDiagram
     actor User
     participant Client
-    participant Router
+    participant Router as FastAPI Router
     participant Manager as Manager Agent
-    participant Tool as Tool Agent
-    participant Redis as Chat History
-    participant LLM as Gemini 2.5 Pro
+    participant Tool as Tool Agent<br/>(LangGraph)
     participant MCP as OXII MCP Server
+    participant LLM as Gemini 2.5 Pro
 
-    Note over User,MCP: Case 2: Device Control (Incomplete) - Phase 1 Only<br/>Total: ~16s (04:39:10 → 04:39:26) - Log truncated
+    Note over User,LLM: Case 2: Device List Query "Show me all devices"<br/>Flow: Manager → Tool Agent → MCP Server → Response<br/>Total Time: ~14.21s
 
-    %% Request Phase
-    User->>Client: "Turn On Light 1 in the bed room"
-    Client->>Router: POST /ai/chat/text
-    activate Router
+    %% === REQUEST PHASE ===
+    User->>Client: "Show me all devices"
+    Client->>+Router: POST /ai/chat/text<br/>{message: "Show me all devices",<br/>sessionId: "testing1234"}
+    Note over Router: 2025-11-02 03:32:25
 
-    %% Manager Processing
-    Router->>Manager: {input, token, sessionId}
-    activate Manager
-    Note over Manager: 04:39:10.000<br/>⚡ Init: instant
-
-    rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY
-        Manager->>Redis: Load context
-        activate Redis
-        Redis-->>Manager: 5 previous messages
-        deactivate Redis
-
-        Manager->>LLM: Analyze with context
-        activate LLM
-        Note over LLM: 04:39:10.000 → 04:39:20.000<br/>⏱️ ~10s
-        LLM-->>Manager: agent_type: tool<br/>confidence: 1.00
-        deactivate LLM
-        Note over Manager: 04:39:20.000<br/>🎯 Route to Tool Agent
-    end
-
-    rect rgb(220, 240, 200)
-        Note over Manager,MCP: 🚀 DELEGATE to Tool Agent
-        Manager->>Tool: Initialize ToolAgent<br/>{input, token}
-        activate Tool
-        
-        Tool->>MCP: Connect SSE<br/>session: aae96377...
-        activate MCP
-        MCP-->>Tool: Load 13 tools
-        deactivate MCP
-        Note over Tool: 04:39:20.000<br/>⚡ Init: instant
-    end
-
-    rect rgb(240, 220, 240)
-        Note over Tool,MCP: 🧠 ITERATION 0: Reasoning
-        Tool->>LLM: reason_and_plan()<br/>TOOL_PROMPT + 13 tools
-        activate LLM
-        Note over LLM: 04:39:20.000 → 04:39:26.000<br/>⏱️ ~6s
-        LLM-->>Tool: tool_calls: [get_device_list]
-        deactivate LLM
-        Note over Tool: Plan: Get devices first
-    end
-
-    rect rgb(220, 240, 220)
-        Note over Tool,MCP: ⚙️ EXECUTION: get_device_list
-        Tool->>MCP: Fresh client<br/>session: e19a5aca...
-        activate MCP
-        MCP-->>Tool: Device list with rooms
-        deactivate MCP
-        Note over Tool: 04:39:26.000<br/>Results stored in state
-    end
-
-    Note over User,MCP: ⚠️ LOG TRUNCATED - Phase 1 complete<br/>Expected: Iteration 1 → switch_on_off_v2 → Iteration 2 finalize<br/>Estimated total time: ~30s (similar to Case 3)
-
-    Tool->>Tool: [Missing logs]<br/>Iteration 1-2 expected
+    %% === MANAGER ROUTING ===
+    Router->>+Manager: Process request
+    Note over Manager: Load conversation context
     
-    Tool-->>Manager: [Expected] {output, success: true}
-    deactivate Tool
+    rect rgb(200, 220, 240)
+        Note over Manager,LLM: 🔍 ANALYZE & ROUTE
+        Manager->>+LLM: Analyze query with history
+        Note over LLM: Analyzing intent...<br/>⏱️ ~3.5s
+        LLM-->>-Manager: {<br/>  agent_type: "tool",<br/>  confidence: 1.00,<br/>  reasoning: "User asking for<br/>  device information"<br/>}
+        Note over Manager: 🎯 Routing decision: tool
+    end
 
-    Manager->>Redis: [Expected] Save conversation
-    Manager-->>Router: [Expected] Success
-    deactivate Manager
-    Router-->>Client: [Expected] HTTP 200
-    deactivate Router
-    Client-->>User: [Expected] Device controlled
+    Manager->>+Tool: delegate to ToolAgent<br/>{input: "Show me all devices",<br/> token: "testing123..."}
+    Note over Tool: 🔧 Tool Agent loaded<br/>⏱️ MCP init: ~1s
 
-    %% Timing Breakdown
-    Note over User,MCP: ⏱️ Visible Timing (Phase 1 only):<br/>• Manager Analysis (LLM): ~10s<br/>• Tool Init (MCP): instant<br/>• Iteration 0 (Reasoning): ~6s<br/>• get_device_list execution: instant<br/>• Visible total: ~16s<br/><br/>⚠️ Missing: Iteration 1-2 (control + finalize)<br/>📊 Expected full total: ~30s<br/>🔴 Bottleneck: LLM reasoning<br/>💡 Architecture: Manager→Tool→LangGraph
+    %% === TOOL AGENT INITIALIZATION ===
+    rect rgb(220, 240, 220)
+        Note over Tool,MCP: 🌐 MCP CLIENT SETUP
+        Tool->>+MCP: Connect SSE<br/>https://mockup-mcp.onrender.com/sse
+        MCP-->>Tool: session_id generated
+        MCP-->>-Tool: 7 tools loaded:<br/>• get_device_list<br/>• switch_on_off_controls_v2<br/>• ac_controls_mesh_v2<br/>• room_one_touch_control<br/>• etc.
+        Note over Tool: ✅ MCP tools initialized
+    end
+
+    %% === TOOL AGENT REASONING ===
+    rect rgb(240, 230, 220)
+        Note over Tool,LLM: 🧠 REASONING PHASE (Iteration 0)
+        
+        Note over Tool: __start__ node<br/>Initialize state
+        
+        Tool->>Tool: reason_node (LangGraph)
+        Note over Tool: Build messages with<br/>TOOL_PROMPT + user input
+        
+        Tool->>+LLM: Invoke with tools bound<br/>SystemMessage: TOOL_PROMPT<br/>HumanMessage: "Show me all devices"
+        Note over LLM: Gemini analyzing<br/>with MCP tool schemas...<br/>⏱️ ~3s
+        LLM-->>-Tool: AIMessage {<br/>  tool_calls: [{<br/>    name: "get_device_list",<br/>    args: {token: "OXII-TOKEN"}<br/>  }]<br/>}
+        
+        Note over Tool: 🔧 Tool calls planned: 1<br/>→ get_device_list
+    end
+
+    %% === TOOL EXECUTION ===
+    rect rgb(220, 240, 255)
+        Note over Tool,MCP: ⚙️ EXECUTION PHASE
+        
+        Tool->>Tool: execute_node<br/>Categorize tools:<br/>• Prerequisites: get_device_list<br/>• Independent: none
+        
+        Note over Tool: 📋 Phase 2a: Execute<br/>prerequisite tool sequentially
+        
+        Tool->>+MCP: Create fresh MCP client<br/>for get_device_list
+        MCP-->>-Tool: Client ready
+        
+        Tool->>+MCP: call_tool("get_device_list",<br/>  {token: "testing1231234"})
+        Note over MCP: Query OXII API<br/>⏱️ ~1.5s
+        MCP-->>-Tool: Device list JSON:<br/>[{<br/>  house_id: 1,<br/>  room_id: 101,<br/>  room_name: "Phòng khách",<br/>  devices: [...],<br/>  buttons: [{<br/>    buttonId: 1001,<br/>    name: "Quạt điện",<br/>    type: "FAN",<br/>    status: "tắt"<br/>  }, ...]<br/>}]
+        
+        Note over Tool: ✅ get_device_list completed<br/>🧹 Cleaned up MCP client
+        
+        Tool->>Tool: Add ToolMessage to history
+    end
+
+    %% === FINAL RESPONSE GENERATION ===
+    rect rgb(255, 245, 220)
+        Note over Tool,LLM: 📝 SYNTHESIZE RESPONSE
+        
+        Tool->>Tool: reason_node (Iteration 1)
+        
+        Tool->>+LLM: Invoke with tool results<br/>Messages: [System, Human,<br/>  AI(tool_calls), ToolMessage(results)]
+        Note over LLM: Generate natural response<br/>based on device data<br/>⏱️ ~4s
+        LLM-->>-Tool: AIMessage {<br/>  content: "Based on the information<br/>  from your home, here are<br/>  the devices I found:<br/><br/>  **Phòng khách**<br/>  - 🌀 Quạt điện (FAN) - Status: tắt<br/>  - ❄️ Điều hòa (CONDITIONER) - Status: tắt"<br/>}
+        
+        Note over Tool: ✅ Final answer ready:<br/>No more tool_calls<br/>output = response.content
+    end
+
+    Tool-->>-Manager: {<br/>  output: "Based on the information...",<br/>  success: True<br/>}
+    
+    Manager->>Manager: finalize_response
+    Note over Manager: Format final output
+    
+    Manager-->>-Router: {<br/>  response: "Device list response",<br/>  processing_time: 14.21s<br/>}
+    Note over Manager: ✅ Request processed<br/>successfully in 14.21s
+
+    Router-->>-Client: HTTP 200 OK
+    Client-->>User: Display device list with icons
+
+    %% === TIMING BREAKDOWN ===
+    Note over User,LLM: ⏱️ Timing Breakdown (Total: 14.21s)<br/><br/>• Manager routing: ~3.5s (LLM)<br/>• Tool Agent MCP init: ~1s<br/>• Tool reasoning (Iter 0): ~3s (LLM)<br/>• MCP tool execution: ~1.5s<br/>• Response synthesis (Iter 1): ~4s (LLM)<br/>• Finalize & return: <0.5s<br/><br/>🔑 Key Flows:<br/>1. StateGraph: __start__ → reason → execute → reason → END<br/>2. Tool Agent uses LangGraph for step-by-step execution<br/>3. MCP client created fresh per tool call for isolation

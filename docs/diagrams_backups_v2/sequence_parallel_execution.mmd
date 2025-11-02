@@ -1,0 +1,144 @@
+sequenceDiagram
+    actor User
+    participant Router
+    participant Manager as Manager Agent
+    participant Plan as Plan Agent
+    participant TP as ThreadPoolExecutor
+    box Aqua Parallel Tool Agent Threads
+    participant T1 as Tool Agent 1
+    participant T2 as Tool Agent 2
+    participant T3 as Tool Agent 3
+    end
+    participant MCP as OXII MCP Server
+    participant LLM as Gemini 2.5 Pro
+
+    Note over User,LLM: Case: Plan Execution with PARALLEL Multi-Threading<br/>Improvement: 3-5x faster than sequential!
+
+    %% User selects plan
+    User->>Router: POST /ai/chat/text<br/>"Execute Plan 1"
+    activate Router
+    Router->>Manager: {input, token, sessionId}
+    activate Manager
+    
+    rect rgb(200, 220, 240)
+        Note over Manager,LLM: 🔍 ANALYZE & ROUTE
+        Manager->>LLM: Analyze query
+        activate LLM
+        LLM-->>Manager: agent_type: plan
+        deactivate LLM
+        Manager->>Plan: {selected_plan_id: 1}
+        activate Plan
+    end
+
+    rect rgb(220, 240, 200)
+        Note over Plan: 📋 PLAN SELECTED:<br/>Security Priority Plan<br/>Tasks: 3
+        Plan->>Plan: Load plan_options
+        Plan->>Plan: Select security_plan
+        
+        Note over Plan: Tasks:<br/>1. Lock all doors<br/>2. Close windows<br/>3. Activate alarm
+    end
+
+    rect rgb(240, 220, 240)
+        Note over Plan,TP: 🚀 INITIALIZE PARALLEL EXECUTION
+        Plan->>TP: Create ThreadPoolExecutor<br/>max_workers=3
+        activate TP
+        Note over TP: Thread pool ready<br/>with 3 workers
+    end
+
+    rect rgb(255, 240, 220)
+        Note over Plan,TP: 📤 SUBMIT ALL TASKS SIMULTANEOUSLY
+        Plan->>TP: Submit Task 1 (Lock doors)
+        Plan->>TP: Submit Task 2 (Close windows)
+        Plan->>TP: Submit Task 3 (Activate alarm)
+        Note over TP: All tasks queued<br/>⏱️ Time: 0.001s
+    end
+
+    rect rgb(220, 255, 220)
+        Note over TP,MCP: 🔥 PARALLEL EXECUTION STARTS
+        
+        par Task 1: Lock all doors
+            TP->>T1: Execute in Thread-0
+            activate T1
+            T1->>T1: Create event loop
+            T1->>MCP: Connect SSE
+            activate MCP
+            MCP-->>T1: Load tools
+            T1->>LLM: Reason & plan
+            activate LLM
+            LLM-->>T1: tool_calls
+            deactivate LLM
+            T1->>MCP: lock_controls(door_ids)
+            MCP-->>T1: ✅ "All doors locked"
+            deactivate MCP
+            T1->>T1: Cleanup event loop
+            T1-->>TP: Success
+            deactivate T1
+            
+        and Task 2: Close windows
+            TP->>T2: Execute in Thread-1
+            activate T2
+            T2->>T2: Create event loop
+            T2->>MCP: Connect SSE
+            activate MCP
+            MCP-->>T2: Load tools
+            T2->>LLM: Reason & plan
+            activate LLM
+            LLM-->>T2: tool_calls
+            deactivate LLM
+            T2->>MCP: close_windows(window_ids)
+            MCP-->>T2: ✅ "Windows closed"
+            deactivate MCP
+            T2->>T2: Cleanup event loop
+            T2-->>TP: Success
+            deactivate T2
+            
+        and Task 3: Activate alarm
+            TP->>T3: Execute in Thread-2
+            activate T3
+            T3->>T3: Create event loop
+            T3->>MCP: Connect SSE
+            activate MCP
+            MCP-->>T3: Load tools
+            T3->>LLM: Reason & plan
+            activate LLM
+            LLM-->>T3: tool_calls
+            deactivate LLM
+            T3->>MCP: activate_alarm()
+            MCP-->>T3: ✅ "Alarm activated"
+            deactivate MCP
+            T3->>T3: Cleanup event loop
+            T3-->>TP: Success
+            deactivate T3
+        end
+        
+        Note over T1,T3: ⚡ All tasks running SIMULTANEOUSLY<br/>⏱️ Total time: max(task_times) ≈ 10s
+    end
+
+    rect rgb(240, 240, 255)
+        Note over TP,Plan: 🔒 THREAD-SAFE RESULT COLLECTION
+        TP->>Plan: with results_lock:<br/>  completed_tasks.append()
+        TP->>Plan: execution_results.append()
+        Note over Plan: All 3 tasks completed<br/>Success rate: 100%
+        
+        Plan->>TP: Shutdown thread pool
+        deactivate TP
+        Note over TP: ✨ Clean shutdown
+    end
+
+    rect rgb(255, 245, 220)
+        Note over Plan: 📊 GENERATE SUMMARY
+        Plan->>Plan: Calculate metrics:<br/>• Total: 3<br/>• Completed: 3<br/>• Failed: 0<br/>• Success: 100%
+        
+        Plan-->>Manager: {<br/>  output: "Security Plan Complete",<br/>  execution_results: [...]<br/>}
+        deactivate Plan
+    end
+
+    Manager-->>Router: Success response
+    deactivate Manager
+    Router-->>User: HTTP 200<br/>"✅ Security Plan Executed"
+    deactivate Router
+
+    %% Timing comparison
+    Note over User,LLM: ⏱️ PERFORMANCE COMPARISON:<br/><br/>Sequential Execution:<br/>• Task 1: 10s<br/>• Task 2: 10s<br/>• Task 3: 10s<br/>• Total: 30s<br/><br/>Parallel Execution:<br/>• Task 1, 2, 3: ~10s (concurrent)<br/>• Total: ~10s<br/><br/>🚀 SPEEDUP: 3x faster!<br/>💡 More tasks = more speedup
+
+    Note over User,LLM: 🎯 KEY FEATURES:<br/>• Dynamic thread pool (workers = num_tasks)<br/>• Isolated event loops per thread<br/>• Thread-safe result collection (Lock)<br/>• Comprehensive timeout handling<br/>• Graceful error isolation<br/>• Real-time logging per thread

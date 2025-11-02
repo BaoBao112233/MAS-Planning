@@ -1,95 +1,162 @@
 sequenceDiagram
     actor User
-    participant Client
-    participant Router
+    participant Router as FastAPI Router
     participant Manager as Manager Agent
-    participant Tool as Tool Agent
-    participant Redis as Chat History
-    participant LLM as Gemini 2.5 Pro
+    participant Plan as Plan Agent
+    participant Executor as ThreadPoolExecutor
+    box rgb(220, 240, 255) Thread Pool Workers
+        participant T0 as Tool Agent<br/>(Thread-15_0)
+        participant T1 as Tool Agent<br/>(Thread-15_1)
+        participant T2 as Tool Agent<br/>(Thread-15_2)
+    end
     participant MCP as OXII MCP Server
+    participant LLM as Gemini 2.5 Pro
 
-    Note over User,MCP: Case 4: Turn Off Device (Optimized) - Fast Execution<br/>Total: 22.32s (04:42:33 → 04:42:55)
+    Note over User,LLM: Case 4: Execute Plan with Parallel Threading<br/>"plan 1" → Execute 3 tasks simultaneously<br/>Total Time: ~29s (vs ~87s sequential)
 
-    %% Request Phase
-    User->>Client: "Turn off Light 1 in the bed room"
-    Client->>Router: POST /ai/chat/text
-    activate Router
+    %% === REQUEST & ROUTING ===
+    User->>+Router: POST /ai/chat/text<br/>"plan 1"
+    Note over Router: 2025-11-02 03:39:26
 
-    %% Manager Processing
-    Router->>Manager: {input, token, sessionId}
-    activate Manager
-    Note over Manager: 04:42:33.611<br/>⚡ Init: 0.019s
-
+    Router->>+Manager: Process request
+    
     rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY
-        Manager->>Redis: Load context
-        activate Redis
-        Redis-->>Manager: 6 previous messages<br/>(including Cases 1-3)
-        deactivate Redis
-        Note over Manager: 04:42:33.620<br/>📚 Context: Recent turn-on cmd
-
-        Manager->>LLM: Analyze with rich context
-        activate LLM
-        Note over LLM: 04:42:33.620 → 04:42:36.471<br/>⏱️ 2.851s (FASTER than Case 3)
-        LLM-->>Manager: agent_type: tool<br/>confidence: 1.00
-        deactivate LLM
-        Note over Manager: 04:42:36.471<br/>🎯 Route to Tool Agent
+        Note over Manager,LLM: 🔍 ANALYZE & ROUTE
+        Manager->>Manager: Load cached plans from Redis<br/>key: "testing1234_testing1234"
+        Note over Manager: 📋 Found 3 cached plans:<br/>• security_plan<br/>• convenience_plan<br/>• energy_plan
+        
+        Manager->>+LLM: Analyze "plan 1"
+        Note over LLM: Intent: select security_plan<br/>⏱️ ~3s
+        LLM-->>-Manager: {<br/>  agent_type: "plan",<br/>  confidence: 1.00,<br/>  selection: "security_plan"<br/>}
     end
 
-    rect rgb(220, 240, 200)
-        Note over Manager,MCP: 🚀 DELEGATE to Tool Agent
-        Manager->>Tool: Initialize ToolAgent<br/>{input, token}
-        activate Tool
+    Manager->>+Plan: Initialize & execute_plan<br/>{selection: "security_plan", token}
+    
+    Note over Plan: 📋 Security Plan:<br/>1. Turn on Switch SH4 (security lighting)<br/>2. Turn off Quạt điện (fan)<br/>3. Turn off Điều hòa (AC)
+
+    %% === PARALLEL EXECUTION SETUP ===
+    rect rgb(255, 245, 220)
+        Note over Plan,Executor: 🔥 PARALLEL EXECUTION INITIALIZATION
         
-        Tool->>MCP: Connect SSE<br/>session: 0694dd40...
-        activate MCP
-        MCP-->>Tool: Load 13 tools
-        deactivate MCP
-        Note over Tool: 04:42:37.013<br/>⚡ Init: 0.540s
+        Plan->>Plan: Initialize MCP client<br/>with 7 tools
+        Plan->>+MCP: SSE connect
+        MCP-->>-Plan: session_id: afc731a...
+        
+        Plan->>+Executor: Create ThreadPoolExecutor<br/>max_workers=3
+        Note over Executor: 🚀 Starting 3 threads in parallel<br/>Each with isolated event loop
+        
+        Note over Plan: ⏱️ 03:39:32 - Start parallel execution
     end
 
-    rect rgb(240, 230, 220)
-        Note over Tool,MCP: 🧠 OPTIMIZED PROCESSING
-        Note over Tool: 04:42:37.013 → 04:42:55.930<br/>⏱️ 18.917s<br/><br/>⚠️ Logs missing detailed phases<br/>Likely optimized execution:
-
-        Tool->>LLM: Reasoning (fewer iterations)<br/>Uses context from Case 3
-        activate LLM
-        LLM-->>Tool: Optimized plan<br/>(skip get_device_list?)
-        deactivate LLM
+    %% === PARALLEL TASK EXECUTION ===
+    par Task 1: Turn on Switch SH4
+        Executor->>+T0: spawn("Turn on Switch SH4...")
+        Note over T0: Thread-ThreadPoolExecutor-15_0<br/>🎯 NEW REQUEST<br/>⏱️ 03:39:34
         
-        Tool->>MCP: switch_on_off_controls_v2<br/>buttonId: 1662, data: 0.0<br/>(turn OFF)
-        activate MCP
-        Note over MCP: Device control execution
-        MCP-->>Tool: ✅ "Light 1 turned off"
-        deactivate MCP
+        T0->>T0: Create ToolAgent instance<br/>in isolated event loop
+        T0->>+MCP: Connect fresh SSE client<br/>session_id: feb23e3...
+        MCP-->>-T0: 7 MCP tools loaded
         
-        Tool->>LLM: Quick finalize
-        activate LLM
-        LLM-->>Tool: Final output
-        deactivate LLM
+        rect rgb(220, 255, 220)
+            Note over T0,LLM: 🔄 Tool Agent LangGraph: reason→execute→reason
+            
+            T0->>T0: __start__ node<br/>Initialize state
+            
+            T0->>+LLM: reason node<br/>"Turn on Switch SH4..."
+            Note over LLM: Plan: get_device_list → switch_on_off_controls_v2<br/>⏱️ ~3s
+            LLM-->>-T0: tool_calls: [get_device_list]
+            
+            T0->>+MCP: execute node<br/>call_tool("get_device_list", {token})
+            Note over MCP: Query OXII API<br/>⏱️ ~1s
+            MCP-->>-T0: Device list (1359 chars)
+            
+            T0->>+LLM: reason node (iteration 2)<br/>with device list
+            Note over LLM: Find buttonId for Switch SH4<br/>Plan control call<br/>⏱️ ~3s
+            LLM-->>-T0: tool_calls: [switch_on_off_controls_v2]
+            
+            T0->>+MCP: execute node<br/>switch_on_off_controls_v2(<br/>  token, buttonId=1001, data=1)
+            Note over MCP: Send ON command<br/>⏱️ ~1s
+            MCP-->>-T0: {"success": true}
+            
+            T0->>+LLM: reason node (iteration 3)<br/>with control result
+            Note over LLM: Synthesize final response<br/>⏱️ ~3s
+            LLM-->>-T0: output: "✅ Command to turn on<br/>Switch SH4 sent successfully"
+            
+            T0->>T0: __end__ node
+        end
         
-        Note over Tool: Context-aware optimization<br/>reduced redundant steps
+        T0->>T0: Cleanup MCP client
+        T0-->>-Executor: Result 1: Success<br/>⏱️ 03:39:48 (+14s)
+        
+    and Task 2: Turn off Fan
+        Executor->>+T1: spawn("Turn off Quạt điện...")
+        Note over T1: Thread-ThreadPoolExecutor-15_1<br/>🎯 NEW REQUEST<br/>⏱️ 03:39:34
+        
+        T1->>T1: Create ToolAgent instance<br/>in isolated event loop
+        T1->>+MCP: Connect fresh SSE client<br/>session_id: unique...
+        MCP-->>-T1: 7 MCP tools loaded
+        
+        rect rgb(220, 255, 220)
+            Note over T1: LangGraph execution:<br/>__start__ → reason → execute<br/>→ reason → execute<br/>→ reason → __end__
+            
+            T1->>MCP: get_device_list(token)
+            Note over MCP: ⏱️ ~1s
+            T1->>LLM: reason with device list
+            Note over LLM: ⏱️ ~3s
+            T1->>MCP: switch_on_off_controls_v2(<br/>  buttonId=1002, data=0)
+            Note over MCP: ⏱️ ~1s
+            T1->>LLM: reason with result
+            Note over LLM: ⏱️ ~3s
+        end
+        
+        T1->>T1: Cleanup MCP client
+        T1-->>-Executor: Result 2: Success<br/>⏱️ 03:39:54 (+20s)
+        
+    and Task 3: Turn off AC
+        Executor->>+T2: spawn("Turn off Điều hòa...")
+        Note over T2: Thread-ThreadPoolExecutor-15_2<br/>🎯 NEW REQUEST<br/>⏱️ 03:39:34
+        
+        T2->>T2: Create ToolAgent instance<br/>in isolated event loop
+        T2->>+MCP: Connect fresh SSE client<br/>session_id: unique...
+        MCP-->>-T2: 7 MCP tools loaded
+        
+        rect rgb(220, 255, 220)
+            Note over T2: LangGraph execution:<br/>__start__ → reason → execute<br/>→ reason → execute<br/>→ reason → __end__
+            
+            T2->>MCP: get_device_list(token)
+            Note over MCP: ⏱️ ~1s
+            T2->>LLM: reason with device list
+            Note over LLM: ⏱️ ~3s
+            T2->>MCP: ac_controls_mesh_v2(<br/>  buttonId=1003, power="off")
+            Note over MCP: ⏱️ ~1s
+            T2->>LLM: reason with result
+            Note over LLM: ⏱️ ~3s
+        end
+        
+        T2->>T2: Cleanup MCP client
+        T2-->>-Executor: Result 3: Success<br/>⏱️ 03:39:55 (+21s)
     end
 
-    Tool-->>Manager: {output, success: true}
-    deactivate Tool
-
-    rect rgb(240, 220, 200)
-        Note over Manager: 📝 FINALIZE
-        Manager->>Manager: format_tool_response()
-        Note over Manager: 04:42:55.930<br/>Final: "Command sent successfully"
+    %% === AGGREGATE RESULTS ===
+    rect rgb(240, 240, 255)
+        Note over Executor,Plan: 📊 AGGREGATE RESULTS
+        
+        Executor->>Executor: Wait for all threads to complete
+        Note over Executor: ⏰ Thread completion times:<br/>• T0: 14s (fastest)<br/>• T1: 20s<br/>• T2: 21s (bottleneck)
+        
+        Executor-->>-Plan: All tasks completed<br/>Success: 3/3<br/>Total: 21s (max of parallel times)
+        
+        Plan->>Plan: Format final response:<br/>"✅ Security Plan executed successfully!<br/><br/>Results:<br/>1. ✅ Switch SH4 turned on<br/>2. ✅ Fan turned off<br/>3. ✅ AC turned off"
     end
 
-    Manager->>Redis: Save conversation
-    activate Redis
-    Redis-->>Manager: ✅ Saved
-    deactivate Redis
+    Plan-->>-Manager: {<br/>  output: formatted_results,<br/>  execution_time: 29s<br/>}
 
-    Manager-->>Router: Success (22.32s)
-    deactivate Manager
-    Router-->>Client: HTTP 200
-    deactivate Router
-    Client-->>User: "Light 1 tắt"
+    Manager->>Manager: finalize_response
+    Manager-->>-Router: Success response<br/>processing_time: 29s
+    Note over Manager: ✅ Parallel execution complete
 
-    %% Timing Breakdown
-    Note over User,MCP: ⏱️ Timing Breakdown:<br/>• Manager Analysis (LLM): 2.851s ✅ FASTER<br/>• Tool Init (MCP): 0.540s<br/>• Tool Processing: 18.917s (optimized)<br/>  └─ Fewer LLM iterations<br/>  └─ Skip redundant get_device_list?<br/>  └─ Direct control execution<br/>• Finalization: 0.009s<br/>• Total: 22.32s<br/><br/>🎯 Optimization: 25% faster than Case 3 (29.91s)<br/>💡 Reason: Context from previous interactions<br/>🔴 Bottleneck: Still LLM-dominated but improved<br/>📊 Architecture: Manager→Tool (context-aware)
+    Router-->>-User: HTTP 200 OK<br/>Display execution results
+
+    %% === PERFORMANCE ANALYSIS ===
+    Note over User,LLM: ⏱️ Performance Analysis<br/><br/>**Sequential Execution Estimate:**<br/>• Task 1: 14s<br/>• Task 2: 20s<br/>• Task 3: 21s<br/>• Total: ~55s (if sequential)<br/><br/>**Actual Parallel Execution:**<br/>• All tasks start: 03:39:34<br/>• Last task ends: 03:39:55<br/>• Total: ~21s<br/><br/>**Speedup: 2.6x** (55s → 21s)<br/><br/>💡 Key Features:<br/>• ThreadPoolExecutor with max_workers=3<br/>• Each thread has isolated asyncio event loop<br/>• Fresh MCP client per thread for connection isolation<br/>• LangGraph StateGraph runs in each thread<br/>• Graceful cleanup with MCP client disposal<br/>• Thread-safe result aggregation
+

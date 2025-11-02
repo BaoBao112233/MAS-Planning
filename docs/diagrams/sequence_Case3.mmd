@@ -1,120 +1,81 @@
 sequenceDiagram
     actor User
-    participant Client
-    participant Router
+    participant Router as FastAPI Router
     participant Manager as Manager Agent
-    participant Tool as Tool Agent
-    participant Redis as Chat History
-    participant LLM as Gemini 2.5 Pro
+    participant Plan as Plan Agent
     participant MCP as OXII MCP Server
+    participant LLM as Gemini 2.5 Pro
 
-    Note over User,MCP: Case 3: Turn On Device - Manager → Tool Agent Flow<br/>Total: 29.91s (04:41:33 → 04:42:03)
+    Note over User,LLM: Case 3: Create Smart Home Plans<br/>"Have 1 person in the living room. Create plan."<br/>Total Time: ~29.71s
 
-    %% Request Phase
-    User->>Client: "Turn On Light 1 in the bed room"
-    Client->>Router: POST /ai/chat/text
-    activate Router
+    %% === REQUEST PHASE ===
+    User->>+Router: POST /ai/chat/text<br/>"Have 1 person in the living room.<br/>Create plan."
+    Note over Router: 2025-11-02 03:38:29
 
-    %% Manager Processing
-    Router->>Manager: {input, token, sessionId}
-    activate Manager
-    Note over Manager: 04:41:33.703<br/>⚡ Init: 0.006s
-
+    %% === MANAGER ROUTING ===
+    Router->>+Manager: Process request
+    
     rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY
-        Manager->>Redis: Load context
-        activate Redis
-        Redis-->>Manager: 5 previous messages
-        deactivate Redis
-
-        Manager->>LLM: Analyze with context
-        activate LLM
-        Note over LLM: 04:41:33.706 → 04:41:42.204<br/>⏱️ 8.498s
-        LLM-->>Manager: agent_type: tool<br/>confidence: 1.00
-        deactivate LLM
-        Note over Manager: 04:41:42.204<br/>🎯 Route to Tool Agent
+        Note over Manager,LLM: 🔍 ANALYZE & ROUTE
+        Manager->>+LLM: Analyze query
+        Note over LLM: Intent: create automation plan<br/>⏱️ ~6s
+        LLM-->>-Manager: {<br/>  agent_type: "plan",<br/>  confidence: 1.00,<br/>  reasoning: "User wants to create<br/>  automation plan for occupancy"<br/>}
+        Note over Manager: 🎯 Routing to Plan Agent
     end
 
-    rect rgb(220, 240, 200)
-        Note over Manager,MCP: 🚀 DELEGATE to Tool Agent
-        Manager->>Tool: Initialize ToolAgent<br/>{input, token}
-        activate Tool
+    Manager->>+Plan: Initialize & delegate<br/>{input, token}
+    Note over Plan: 📋 Plan Agent loaded<br/>with LLM & MCP tools
+
+    %% === STEP 1: ANALYZE INPUT ===
+    rect rgb(220, 255, 220)
+        Note over Plan,LLM: 🎯 STEP 1: ANALYZING USER INPUT
         
-        Tool->>MCP: Connect SSE<br/>session: 2206e1bb...
-        activate MCP
-        MCP-->>Tool: Load 13 tools
-        deactivate MCP
-        Note over Tool: 04:41:43.293<br/>⚡ Init: 1.088s
+        Plan->>+LLM: Analyze with ANALYZE_INPUT_PROMPT<br/>"Have 1 person in the living room.<br/>Create plan."
+        Note over LLM: Extract intent & requirements<br/>⏱️ ~10s
+        LLM-->>-Plan: {<br/>  primary_intent: "create_plan",<br/>  context: {<br/>    room: "living room",<br/>    occupancy: 1,<br/>    action: "automation"<br/>  },<br/>  key_requirements: [<br/>    "comfort", "security", "energy"<br/>  ]<br/>}
+        
+        Note over Plan: ✅ Input analysis complete<br/>Primary Intent: create_plan
     end
 
-    rect rgb(240, 220, 240)
-        Note over Tool,MCP: 🧠 ITERATION 0: Reasoning
-        Tool->>LLM: reason_and_plan()<br/>TOOL_PROMPT + 13 tools
-        activate LLM
-        Note over LLM: 04:41:43.297 → 04:41:49.578<br/>⏱️ 6.281s
-        LLM-->>Tool: tool_calls: [get_device_list]
-        deactivate LLM
-        Note over Tool: Plan: Get devices first
+    %% === STEP 2: GET DEVICES ===
+    rect rgb(240, 240, 255)
+        Note over Plan,MCP: 🎯 STEP 2: RETRIEVING DEVICE INFORMATION
+        
+        Plan->>+MCP: Connect SSE & get tools
+        MCP-->>-Plan: 7 MCP tools loaded
+        
+        Plan->>+MCP: call_tool("get_device_list",<br/>  {token})
+        Note over MCP: Query OXII API<br/>⏱️ ~2s
+        MCP-->>-Plan: Device data (1359 chars):<br/>[{<br/>  house_id: 1,<br/>  room_id: 101,<br/>  room_name: "Phòng khách",<br/>  buttons: [<br/>    {buttonId: 1001, name: "Quạt điện",<br/>     type: "FAN", status: "tắt"},<br/>    {buttonId: 1002, name: "Điều hòa",<br/>     type: "CONDITIONER", status: "tắt"}<br/>  ]<br/>}]
+        
+        Note over Plan: ✅ Device info retrieved<br/>🏠 Found 1 room with devices
     end
 
-    rect rgb(220, 240, 220)
-        Note over Tool,MCP: ⚙️ EXECUTION: get_device_list
-        Tool->>MCP: Fresh client<br/>session: (implicitly executed)
-        activate MCP
-        MCP-->>Tool: Device list with rooms
-        deactivate MCP
-        Note over Tool: Results stored in state
+    %% === STEP 3: CREATE 3 PLANS ===
+    rect rgb(255, 245, 220)
+        Note over Plan,LLM: 🎯 STEP 3: CREATING 3 PRIORITY PLANS
+        
+        Plan->>+LLM: Generate plans with CREATE_PLANS_PROMPT<br/>Input:<br/>• User request<br/>• Input analysis<br/>• Device information<br/>Instruction: Create 3 plans<br/>(Security, Convenience, Energy)
+        Note over LLM: Generate 3 priority plans<br/>with device-specific tasks<br/>⏱️ ~8s
+        LLM-->>-Plan: Plans JSON:<br/>{<br/>  "Security_Plan": [<br/>    "Turn on Switch SH4 for security lighting",<br/>    "Turn off Quạt điện",<br/>    "Turn off Điều hòa"<br/>  ],<br/>  "Convenience_Plan": [<br/>    "Turn on Điều hòa at 24°C cool mode",<br/>    "Turn on Quạt điện",<br/>    "Turn on Switch SH4"<br/>  ],<br/>  "Energy_Plan": [<br/>    "Set Điều hòa to 26°C cool mode",<br/>    "Turn off Switch SH4",<br/>    "Turn off Quạt điện"<br/>  ]<br/>}
+        
+        Note over Plan: ✅ Plans created successfully:<br/>🔒 Security Plan: 3 tasks<br/>🏠 Convenience Plan: 3 tasks<br/>🌱 Energy Plan: 3 tasks
     end
 
-    rect rgb(240, 220, 240)
-        Note over Tool,MCP: 🧠 ITERATION 1: Reasoning
-        Tool->>LLM: reason_and_plan()<br/>+ device list results
-        activate LLM
-        Note over LLM: 04:41:50.265 → 04:41:58.043<br/>⏱️ 7.778s
-        LLM-->>Tool: tool_calls: [switch_on_off_v2]<br/>buttonId: 1662, data: 1.0
-        deactivate LLM
-        Note over Tool: Plan control execution
-    end
+    %% === FORMAT & RETURN ===
+    Plan->>Plan: Format response with emoji<br/>and descriptions
+    
+    Note over Plan: Final Output:<br/>🏠 **Smart Home Automation Plans**<br/><br/>🔒 **Plan 1: Security Priority**<br/>   1. Turn on Switch SH4...<br/>   2. Turn off Quạt điện...<br/>   3. Turn off Điều hòa...<br/><br/>🏡 **Plan 2: Convenience Priority**<br/>   1. Turn on Điều hòa at 24°C...<br/>   ...<br/><br/>⚡ **Plan 3: Energy Efficiency**<br/>   ...
+    
+    Plan-->>-Manager: {<br/>  output: formatted_plans,<br/>  plan_options: {<br/>    "security_plan": [...],<br/>    "convenience_plan": [...],<br/>    "energy_plan": [...]<br/>  }<br/>}
 
-    rect rgb(220, 240, 220)
-        Note over Tool,MCP: ⚡ EXECUTION: switch_on_off_v2
-        Tool->>MCP: Fresh client<br/>session: 3270ee0d...
-        activate MCP
-        Note over MCP: 04:41:58.589 → 04:42:00.936<br/>⏱️ 2.347s
-        MCP-->>Tool: ✅ "Đèn 1 đã bật thành công"
-        deactivate MCP
-        Note over Tool: 04:42:00.936<br/>Cleanup MCP client
-    end
+    Manager->>Manager: finalize_response
+    Manager->>Router: Store plan_options in Redis<br/>key: "testing1234_testing1234"
+    
+    Manager-->>-Router: Success response<br/>processing_time: 29.71s
+    Note over Manager: ✅ Request processed<br/>💾 Plans cached for selection
 
-    rect rgb(240, 220, 240)
-        Note over Tool,LLM: 🧠 ITERATION 2: Finalize
-        Tool->>LLM: reason_and_plan()<br/>+ execution results
-        activate LLM
-        Note over LLM: 04:42:00.940 → 04:42:03.604<br/>⏱️ 2.664s
-        LLM-->>Tool: output: "Command sent successfully"<br/>NO tool_calls (done)
-        deactivate LLM
-        Note over Tool: 04:42:03.607<br/>✨ FINAL OUTPUT ready
-    end
+    Router-->>-User: HTTP 200 OK<br/>Display 3 plans with selection prompt
 
-    Tool-->>Manager: {output, success: true}
-    deactivate Tool
-
-    rect rgb(240, 220, 200)
-        Note over Manager: 📝 FINALIZE
-        Manager->>Manager: format_tool_response()
-        Note over Manager: 04:42:03.608
-    end
-
-    Manager->>Redis: Save conversation
-    activate Redis
-    Redis-->>Manager: ✅ Saved
-    deactivate Redis
-
-    Manager-->>Router: Success (29.91s)
-    deactivate Manager
-    Router-->>Client: HTTP 200
-    deactivate Router
-    Client-->>User: "Đèn 1 đã bật"
-
-    %% Timing Breakdown
-    Note over User,MCP: ⏱️ Timing Breakdown:<br/>• Manager Analysis (LLM): 8.498s<br/>• Tool Init (MCP): 1.088s<br/>• Iteration 0 (Reasoning): 6.281s<br/>• Iteration 1 (Reasoning): 7.778s<br/>• Execution (MCP switch): 2.347s<br/>• Iteration 2 (Finalize): 2.664s<br/>• Save + finalize: 0.254s<br/>• Total: 29.91s<br/><br/>🔴 Bottleneck: LLM reasoning (16.723s total)<br/>💡 Architecture: Manager→Tool→LangGraph (3 iterations)
+    %% === TIMING BREAKDOWN ===
+    Note over User,LLM: ⏱️ Timing Breakdown (Total: 29.71s)<br/><br/>• Manager routing: ~6s (LLM)<br/>• Plan Agent init: ~1s<br/>• Step 1 (Analyze input): ~10s (LLM)<br/>• Step 2 (Get devices): ~2s (MCP)<br/>• Step 3 (Create plans): ~8s (LLM)<br/>• Format & cache: ~2.5s<br/><br/>💡 Key Features:<br/>• 3-step workflow clearly separated<br/>• LLM used for intent analysis & plan generation<br/>• MCP used for device data retrieval<br/>• Plans cached in session for later execution
