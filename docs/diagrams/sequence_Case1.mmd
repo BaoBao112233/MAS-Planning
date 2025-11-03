@@ -4,61 +4,44 @@ sequenceDiagram
     participant Router
     participant Manager as Manager Agent
     participant Redis as Chat History (Redis)
-    participant LLM as Gemini 2.5 Pro
+    participant LLM as Gemini 2.5 Flash
 
-    Note over User,LLM: Case 1: Simple Greeting - Manager Internal Direct Response<br/>Total: 4.86s (04:38:34 → 04:38:39)
+    Note over User,LLM: Case 1: Simple Greeting - Manager Internal Direct Response<br/>Total: 3.06s (07:12:35 → 07:12:38)
 
     %% Request Phase
-    User->>Client: "Hello"
-    Client->>Router: POST /ai/chat/text<br/>message: "Hello"<br/>token: JWT<br/>sessionId: testing1234
+    User->>Client: "hi"
+    Client->>Router: POST /ai/chat/text<br/>sessionId: testing-gemini-25-flash
     activate Router
-    Note over Router: 04:38:34.457<br/>Token validation
-
-    %% Manager Initialization
-    Router->>Manager: Initialize & Process<br/>{input: "Hello", token}
-    activate Manager
-    Note over Manager: 04:38:34.481<br/>⚡ Init: 0.024s<br/>Manager Agent ready
+    Note over Router: 07:12:35.770<br/>⚡ Request received
     
-    rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY NODE
-        Manager->>Redis: Load conversation context
-        activate Redis
-        Redis-->>Manager: 1 previous message
-        deactivate Redis
-        Note over Manager: 04:38:34.484<br/>📚 Context loaded
-
-        Manager->>LLM: Analyze query with MANAGER_PROMPT<br/>"Hello" + context
-        activate LLM
-        Note over LLM: 04:38:34.484 → 04:38:39.336<br/>⏱️ LLM Routing Decision: ~4.852s<br/>(BOTTLENECK - Gemini 2.5 Pro)
-        LLM-->>Manager: reasoning: Simple greeting<br/>agent_type: direct<br/>confidence: 1.00<br/>direct_answer: Greeting text
-        deactivate LLM
-        Note over Manager: 04:38:39.336<br/>🎯 Routing: agent_type="direct"
-    end
-
-    rect rgb(220, 240, 200)
-        Note over Manager: 🚀 DELEGATE NODE (Internal Direct Handler)
-        Manager->>Manager: route_to_agent(state)<br/>agent_type == 'direct'<br/>→ Handle internally
-        Note over Manager: 04:38:39.337<br/>Extract direct_answer from<br/>reasoning_result<br/>(No external agent call)
-        Note over Manager: delegation_result = {<br/>  'output': direct_answer,<br/>  'agent_type': 'direct',<br/>  'success': True<br/>}
-    end
-
-    rect rgb(240, 220, 200)
-        Note over Manager: 📝 FINALIZE NODE
-        Manager->>Manager: finalize_response(state)<br/>format_final_response()
-        Note over Manager: 04:38:39.337<br/>📄 Final output formatted:<br/>"🤖 Smart Home Assistant<br/>I can help you with..."
-    end
-
-    Manager->>Redis: Save conversation<br/>(user + AI messages)
+    Router->>Manager: {input: "hi", token, session}
+    activate Manager
+    Note over Manager: 07:12:35.776<br/>📥 Process start
+    
+    %% Manager Agent Decision
+    Manager->>Redis: Load chat history
     activate Redis
-    Redis-->>Manager: ✅ Saved to session
+    Redis-->>Manager: Empty history (new session)
     deactivate Redis
-    Note over Manager: 04:38:39.345<br/>💾 History updated
-
-    Manager-->>Router: Success response<br/>Total time: 4.86s
+    
+    Manager->>LLM: Analyze query intent + Generate response
+    activate LLM
+    Note over LLM: 07:12:35.779 → 07:12:38.829<br/>⏱️ 3.05s<br/>🔴 MAIN BOTTLENECK (99.7% of total)
+    LLM-->>Manager: agent_type: direct<br/>"Hello! How can I help you today?"
+    deactivate LLM
+    
+    Manager->>Redis: Save conversation
+    activate Redis
+    Note over Redis: 07:12:38.835<br/>⚡ instant
+    Redis-->>Manager: ✅ Saved
+    deactivate Redis
+    
+    Manager-->>Router: Response ready
     deactivate Manager
-    Router-->>Client: HTTP 200 OK<br/>response text
+    Note over Manager: 07:12:38.859<br/>✅ Request processed in 3.06s
+    
+    Router-->>Client: 200 OK + Response
     deactivate Router
-    Client-->>User: Display greeting
-
-    %% Timing Breakdown
-    Note over User,LLM: ⏱️ Timing Breakdown:<br/>• Router → Manager Init: 0.024s<br/>• ANALYZE_QUERY (LLM): 4.852s ⚠️ BOTTLENECK<br/>  └─ Load context: ~0.003s<br/>  └─ Gemini LLM call: ~4.849s<br/>• DELEGATE (internal): 0.001s<br/>• FINALIZE: 0.001s<br/>• Save history: 0.008s<br/>• Total: 4.86s<br/><br/>💡 Key: Manager handles "direct" responses internally<br/>NO separate Direct Agent exists
+    Client-->>User: "Hello! How can I help you today?"
+    
+    Note over User,LLM: 💡 Key Insight: 99.7% time spent on LLM call<br/>No tool routing needed for simple greeting<br/>Manager handles internally

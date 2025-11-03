@@ -44,7 +44,7 @@ APP_PORT=9000
 # Google Cloud (nếu dùng Vertex AI)
 GOOGLE_CLOUD_PROJECT="your-project-id"
 GOOGLE_CLOUD_LOCATION="us-central1"
-MODEL_NAME="gemini-2.5-pro"
+MODEL_NAME="gemini-2.5-flash"
 
 # MCP Server
 MCP_SERVER_URL="http://localhost:9031"
@@ -165,7 +165,7 @@ curl -X POST "http://localhost:9000/ai/chat" \
 | `APP_PORT` | Server port | 9000 | Yes |
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID | "my-project-123" | Yes (if using Vertex AI) |
 | `GOOGLE_CLOUD_LOCATION` | GCP region | "us-central1" | Yes (if using Vertex AI) |
-| `MODEL_NAME` | LLM model | "gemini-2.5-pro" | Yes |
+| `MODEL_NAME` | LLM model | "gemini-2.5-flash" | Yes |
 | `MCP_SERVER_URL` | MCP server endpoint | `http://localhost:9031` | Yes |
 | `API_BASE_URL` | External API for plan upload | `http://localhost:8080` | No |
 

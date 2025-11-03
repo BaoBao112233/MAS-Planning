@@ -517,7 +517,7 @@ class VertexAIIntegration:
         self.credentials_path = env.GOOGLE_APPLICATION_CREDENTIALS
         self.model_cache = {}
     
-    def initialize_llm(self, model_name: str = "gemini-2.5-pro", temperature: float = 0.2, tools: List = None) -> ChatVertexAI:
+    def initialize_llm(self, model_name: str = "gemini-2.5-flash", temperature: float = 0.2, tools: List = None) -> ChatVertexAI:
         """Initialize Vertex AI LLM với tools"""
         cache_key = f"{model_name}_{temperature}_{len(tools) if tools else 0}"
         
@@ -561,7 +561,7 @@ class VertexAIIntegration:
             
             # Test basic API access
             test_llm = ChatVertexAI(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-2.5-flash",
                 project=self.project,
                 location=self.location
             )
@@ -901,12 +901,12 @@ async def check_vertex_ai_health():
     """Health check for Vertex AI"""
     try:
         llm = ChatVertexAI(
-            model_name="gemini-2.5-pro",
+            model_name="gemini-2.5-flash",
             project=env.GOOGLE_CLOUD_PROJECT,
             location=env.GOOGLE_CLOUD_LOCATION
         )
         response = await llm.ainvoke("Health check")
-        return {'response_received': True, 'model': 'gemini-2.5-pro'}
+        return {'response_received': True, 'model': 'gemini-2.5-flash'}
     except Exception as e:
         raise Exception(f"Vertex AI unavailable: {e}")
 

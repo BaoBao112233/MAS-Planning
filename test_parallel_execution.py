@@ -16,7 +16,7 @@ def test_parallel_execution():
     
     # Initialize Plan Agent
     plan_agent = PlanAgent(
-        model="gemini-2.5-pro",
+        model="gemini-2.5-flash",
         temperature=0.2,
         verbose=True
     )

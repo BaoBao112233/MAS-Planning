@@ -16,7 +16,7 @@ class EnvironmentSettings(BaseSettings):
     APP_DESC: str
     APP_PORT: int = 9000
     # Vertex AI settings
-    MODEL_NAME: str = "gemini-2.5-pro"
+    MODEL_NAME: str = "gemini-2.5-flash"
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_CLOUD_LOCATION: str = "us-east1"
     GOOGLE_APPLICATION_CREDENTIALS: str = "service-account.json"

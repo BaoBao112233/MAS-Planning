@@ -40,7 +40,7 @@ memories = {}
 
 class Agent:
 
-    def __init__(self, model: str = "gemini-2.5-pro", temperature: float = 0.2):
+    def __init__(self, model: str = "gemini-2.5-flash", temperature: float = 0.2):
         try:
             # Load credentials từ service account file
             credentials_path = os.path.abspath(env.GOOGLE_APPLICATION_CREDENTIALS)

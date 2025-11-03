@@ -62,7 +62,7 @@ APP_PORT=9000
 # Google Cloud Configuration
 GOOGLE_CLOUD_PROJECT="your-project-id"
 GOOGLE_CLOUD_LOCATION="us-central1"
-MODEL_NAME="gemini-2.5-pro"
+MODEL_NAME="gemini-2.5-flash"
 GOOGLE_APPLICATION_CREDENTIALS="service-account.json"
 
 # Redis Configuration
@@ -250,7 +250,7 @@ class PlanAgent(BaseAgent):
     """
     
     def __init__(self, 
-                 model: str = "gemini-2.5-pro", 
+                 model: str = "gemini-2.5-flash", 
                  temperature: float = 0.2, 
                  max_iteration: int = 10,
                  verbose: bool = True):
@@ -402,7 +402,7 @@ class TestPlanAgent:
         agent = PlanAgent(verbose=False)
         
         assert agent.name == "Plan Agent"
-        assert agent.model == "gemini-2.5-pro"
+        assert agent.model == "gemini-2.5-flash"
         assert agent.temperature == 0.2
         assert agent.tools == []
         assert agent.llm is None
@@ -1052,7 +1052,7 @@ class TroubleshootingGuide:
             
             # Test LLM initialization
             llm = ChatVertexAI(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-2.5-flash",
                 project=env.GOOGLE_CLOUD_PROJECT,
                 location=env.GOOGLE_CLOUD_LOCATION
             )

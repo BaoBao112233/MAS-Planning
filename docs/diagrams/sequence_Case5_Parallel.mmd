@@ -1,0 +1,171 @@
+sequenceDiagram
+    actor User
+    participant Client
+    participant Router
+    participant Manager as Manager Agent
+    participant Plan as Plan Agent
+    participant Redis
+    participant LLM as Gemini 2.5 Flash
+    participant MCP as OXII MCP Server
+    participant T1 as Thread-0
+    participant T2 as Thread-1
+    participant T3 as Thread-2
+    participant T4 as Thread-3
+
+    Note over User,T4: Case 5: Plan Execution with Parallel Tasks<br/>Phase 1 (Create Plan): 23.58s | Phase 2 (Execute Plan 1): 27.11s | Total: 50.69s
+
+    rect rgb(200, 200, 250)
+        Note over User,MCP: PHASE 1: PLAN CREATION (23.58s)<br/>07:14:54 → 07:15:17
+        
+        User->>Client: "Have 1 person in the bed room, Create plan."
+        Client->>Router: POST /ai/chat/text
+        activate Router
+        
+        Router->>Manager: {input, token, session}
+        activate Manager
+        Note over Manager: 07:14:54.011
+        
+        Manager->>Redis: Load context
+        activate Redis
+        Redis-->>Manager: 8 messages
+        deactivate Redis
+        
+        Manager->>LLM: Analyze query
+        activate LLM
+        Note over LLM: ⏱️ 2.33s
+        LLM-->>Manager: agent_type: plan (1.00)
+        deactivate LLM
+        
+        Manager->>Plan: Initialize PlanAgent
+        activate Plan
+        
+        Plan->>MCP: Connect SSE + Load tools
+        activate MCP
+        Note over MCP: ⏱️ 1.92s
+        MCP-->>Plan: 13 tools loaded
+        deactivate MCP
+        
+        Plan->>LLM: Analyze input
+        activate LLM
+        Note over LLM: ⏱️ 3.45s
+        LLM-->>Plan: Context understood
+        deactivate LLM
+        
+        Plan->>MCP: get_device_list
+        activate MCP
+        Note over MCP: ⏱️ 1.67s
+        MCP-->>Plan: Bedroom devices
+        deactivate MCP
+        
+        Plan->>LLM: Generate 3 plans
+        activate LLM
+        Note over LLM: ⏱️ 14.21s<br/>🔴 MAJOR BOTTLENECK
+        LLM-->>Plan: Plan 1: Security<br/>Plan 2: Comfort<br/>Plan 3: Energy
+        deactivate LLM
+        
+        Plan-->>Manager: 3 plans ready
+        deactivate Plan
+        Manager-->>Router: Response
+        deactivate Manager
+        Note over Manager: ✅ 23.58s
+        
+        Router-->>Client: 200 OK
+        deactivate Router
+        Client-->>User: "Select Plan 1, 2, or 3"
+    end
+    
+    rect rgb(220, 240, 220)
+        Note over User,T4: PHASE 2: EXECUTE PLAN 1 - SECURITY (27.11s)<br/>07:15:26 → 07:15:53
+        
+        User->>Client: "plan 1"
+        Client->>Router: POST /ai/chat/text
+        activate Router
+        
+        Router->>Manager: {input: "plan 1", token}
+        activate Manager
+        Note over Manager: 07:15:26.398
+        
+        Manager->>Redis: Load context
+        activate Redis
+        Redis-->>Manager: 10 messages + plan cache
+        deactivate Redis
+        
+        Manager->>LLM: Analyze
+        activate LLM
+        Note over LLM: ⏱️ 2.68s
+        LLM-->>Manager: plan (1.00)
+        deactivate LLM
+        
+        Manager->>Plan: Execute Plan 1
+        activate Plan
+        
+        Plan->>MCP: Connect
+        activate MCP
+        Note over MCP: ⏱️ 1.85s
+        MCP-->>Plan: Ready
+        deactivate MCP
+        
+        Plan->>Plan: Upload plan to API
+        Note over Plan: ⏱️ 2.22s
+        
+        Note over Plan,T4: 🔥 PARALLEL EXECUTION: 4 Tasks (max: ~18.5s)
+        
+        par Task 1: Turn on all lights
+            Plan->>T1: Thread-0
+            activate T1
+            T1->>MCP: Multiple switch_on_off calls
+            activate MCP
+            Note over MCP: ⏱️ ~12.3s
+            MCP-->>T1: ✅ 8 lights ON
+            deactivate MCP
+            T1-->>Plan: Task 1 done
+            deactivate T1
+        and Task 2: Ensure illuminated
+            Plan->>T2: Thread-1
+            activate T2
+            T2->>MCP: Verify lighting
+            activate MCP
+            Note over MCP: ⏱️ ~8.1s
+            MCP-->>T2: ✅ Verified
+            deactivate MCP
+            T2-->>Plan: Task 2 done
+            deactivate T2
+        and Task 3: Activate beacon switch
+            Plan->>T3: Thread-2
+            activate T3
+            T3->>MCP: Activate beacon
+            activate MCP
+            Note over MCP: ⏱️ ~9.5s
+            MCP-->>T3: ✅ Activated
+            deactivate MCP
+            T3-->>Plan: Task 3 done
+            deactivate T3
+        and Task 4: Activate 4-button switch
+            Plan->>T4: Thread-3
+            activate T4
+            T4->>MCP: Activate switch
+            activate MCP
+            Note over MCP: ⏱️ ~18.5s<br/>🔴 Longest task
+            MCP-->>T4: ✅ Activated
+            deactivate MCP
+            T4-->>Plan: Task 4 done
+            deactivate T4
+        end
+        
+        Note over Plan: Wait for all threads (~18.5s)
+        
+        Plan->>Plan: Update plan status
+        Note over Plan: ⏱️ 1.74s
+        
+        Plan-->>Manager: Execution complete
+        deactivate Plan
+        Manager-->>Router: Response
+        deactivate Manager
+        Note over Manager: ✅ 27.11s
+        
+        Router-->>Client: 200 OK
+        deactivate Router
+        Client-->>User: "Plan 1 executed successfully"
+    end
+    
+    Note over User,T4: 💡 Total Time: 50.69s<br/>Plan Creation: 23.58s (LLM generation 14.21s 🔴)<br/>Plan Execution: 27.11s (Parallel tasks saved ~20s!)

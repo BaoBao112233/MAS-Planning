@@ -151,7 +151,7 @@ APP_PORT=9000
 # Google Cloud
 GOOGLE_CLOUD_PROJECT="your-project-id"
 GOOGLE_CLOUD_LOCATION="us-central1"
-MODEL_NAME="gemini-2.5-pro"
+MODEL_NAME="gemini-2.5-flash"
 
 # MCP Server
 MCP_SERVER_URL="http://localhost:9031"

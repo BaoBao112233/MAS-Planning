@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 class PlanAgent(BaseAgent):
     def __init__(self, 
-                 model: str = "gemini-2.5-pro", 
+                 model: str = "gemini-2.5-flash", 
                  temperature: float = 0.2, 
                  max_iteration=10, 
                  verbose=True):

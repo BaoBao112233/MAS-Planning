@@ -70,7 +70,7 @@ class AsyncGraphExecutor:
 class ToolAgent:
     """Tool Agent sử dụng MCP để thực hiện smart home automation tasks với reasoning tự động"""
 
-    def __init__(self, model="gemini-2.5-pro", temperature=0.2, verbose=False, max_iterations=5):
+    def __init__(self, model="gemini-2.5-flash", temperature=0.2, verbose=False, max_iterations=5):
         self.name = "Tool Agent"
         self.model = model
         self.temperature = temperature

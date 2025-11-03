@@ -4,92 +4,92 @@ sequenceDiagram
     participant Router
     participant Manager as Manager Agent
     participant Tool as Tool Agent
-    participant Redis as Chat History
-    participant LLM as Gemini 2.5 Pro
+    participant Redis
+    participant LLM as Gemini 2.5 Flash
     participant MCP as OXII MCP Server
 
-    Note over User,MCP: Case 4: Turn Off Device (Optimized) - Fast Execution<br/>Total: 22.32s (04:42:33 → 04:42:55)
+    Note over User,MCP: Case 4: Turn Off Light<br/>Total: 15.62s (07:13:54 → 07:14:09)
 
-    %% Request Phase
-    User->>Client: "Turn off Light 1 in the bed room"
+    User->>Client: "turn off light 1 in the bed room."
     Client->>Router: POST /ai/chat/text
     activate Router
-
-    %% Manager Processing
-    Router->>Manager: {input, token, sessionId}
+    
+    Router->>Manager: {input, token, session}
     activate Manager
-    Note over Manager: 04:42:33.611<br/>⚡ Init: 0.019s
-
-    rect rgb(200, 220, 240)
-        Note over Manager,LLM: 🔍 ANALYZE_QUERY
-        Manager->>Redis: Load context
-        activate Redis
-        Redis-->>Manager: 6 previous messages<br/>(including Cases 1-3)
-        deactivate Redis
-        Note over Manager: 04:42:33.620<br/>📚 Context: Recent turn-on cmd
-
-        Manager->>LLM: Analyze with rich context
-        activate LLM
-        Note over LLM: 04:42:33.620 → 04:42:36.471<br/>⏱️ 2.851s (FASTER than Case 3)
-        LLM-->>Manager: agent_type: tool<br/>confidence: 1.00
-        deactivate LLM
-        Note over Manager: 04:42:36.471<br/>🎯 Route to Tool Agent
-    end
-
-    rect rgb(220, 240, 200)
-        Note over Manager,MCP: 🚀 DELEGATE to Tool Agent
-        Manager->>Tool: Initialize ToolAgent<br/>{input, token}
-        activate Tool
-        
-        Tool->>MCP: Connect SSE<br/>session: 0694dd40...
-        activate MCP
-        MCP-->>Tool: Load 13 tools
-        deactivate MCP
-        Note over Tool: 04:42:37.013<br/>⚡ Init: 0.540s
-    end
-
-    rect rgb(240, 230, 220)
-        Note over Tool,MCP: 🧠 OPTIMIZED PROCESSING
-        Note over Tool: 04:42:37.013 → 04:42:55.930<br/>⏱️ 18.917s<br/><br/>⚠️ Logs missing detailed phases<br/>Likely optimized execution:
-
-        Tool->>LLM: Reasoning (fewer iterations)<br/>Uses context from Case 3
-        activate LLM
-        LLM-->>Tool: Optimized plan<br/>(skip get_device_list?)
-        deactivate LLM
-        
-        Tool->>MCP: switch_on_off_controls_v2<br/>buttonId: 1662, data: 0.0<br/>(turn OFF)
-        activate MCP
-        Note over MCP: Device control execution
-        MCP-->>Tool: ✅ "Light 1 turned off"
-        deactivate MCP
-        
-        Tool->>LLM: Quick finalize
-        activate LLM
-        LLM-->>Tool: Final output
-        deactivate LLM
-        
-        Note over Tool: Context-aware optimization<br/>reduced redundant steps
-    end
-
-    Tool-->>Manager: {output, success: true}
-    deactivate Tool
-
-    rect rgb(240, 220, 200)
-        Note over Manager: 📝 FINALIZE
-        Manager->>Manager: format_tool_response()
-        Note over Manager: 04:42:55.930<br/>Final: "Command sent successfully"
-    end
-
-    Manager->>Redis: Save conversation
+    
+    Manager->>Redis: Load history
     activate Redis
-    Redis-->>Manager: ✅ Saved
+    Redis-->>Manager: 6 messages (turn ON context)
     deactivate Redis
-
-    Manager-->>Router: Success (22.32s)
+    
+    Manager->>LLM: Analyze + Route
+    activate LLM
+    Note over LLM: ⏱️ 3.08s<br/>Cache hit: 4926 tokens
+    LLM-->>Manager: tool (1.00)
+    deactivate LLM
+    
+    Manager->>Tool: Init ToolAgent
+    activate Tool
+    
+    Tool->>MCP: Connect
+    activate MCP
+    Note over MCP: ⏱️ 1.29s
+    MCP-->>Tool: 13 tools
+    deactivate MCP
+    
+    rect rgb(255, 250, 240)
+        Note over Tool,LLM: Iter 1: Discovery
+        Tool->>LLM: Which device?
+        activate LLM
+        Note over LLM: ⏱️ 1.20s
+        LLM-->>Tool: get_device_list
+        deactivate LLM
+        
+        Tool->>MCP: get_device_list
+        activate MCP
+        Note over MCP: ⏱️ 1.53s
+        MCP-->>Tool: buttonId=1662
+        deactivate MCP
+    end
+    
+    rect rgb(240, 255, 240)
+        Note over Tool,LLM: Iter 2: Execute
+        Tool->>LLM: Turn off 1662
+        activate LLM
+        Note over LLM: ⏱️ 1.35s
+        LLM-->>Tool: switch_on_off(1662, 0.0)
+        deactivate LLM
+        
+        Tool->>MCP: switch_on_off_controls_v2
+        activate MCP
+        Note over MCP: ⏱️ 2.97s<br/>🔴 BOTTLENECK
+        MCP-->>Tool: ✅ OFF
+        deactivate MCP
+    end
+    
+    rect rgb(255, 245, 235)
+        Note over Tool,LLM: Iter 3: Verify
+        Tool->>LLM: Success msg
+        activate LLM
+        Note over LLM: ⏱️ 2.53s
+        LLM-->>Tool: Response
+        deactivate LLM
+        
+        Tool->>Redis: Save
+        activate Redis
+        Note over Redis: ⏱️ 0.67s
+        Redis-->>Tool: ✅
+        deactivate Redis
+    end
+    
+    Tool-->>Manager: Done
+    deactivate Tool
+    Manager-->>Router: Response
     deactivate Manager
-    Router-->>Client: HTTP 200
+    Note over Manager: ✅ 15.62s
+    
+    Router-->>Client: 200 OK
     deactivate Router
-    Client-->>User: "Light 1 tắt"
-
-    %% Timing Breakdown
-    Note over User,MCP: ⏱️ Timing Breakdown:<br/>• Manager Analysis (LLM): 2.851s ✅ FASTER<br/>• Tool Init (MCP): 0.540s<br/>• Tool Processing: 18.917s (optimized)<br/>  └─ Fewer LLM iterations<br/>  └─ Skip redundant get_device_list?<br/>  └─ Direct control execution<br/>• Finalization: 0.009s<br/>• Total: 22.32s<br/><br/>🎯 Optimization: 25% faster than Case 3 (29.91s)<br/>💡 Reason: Context from previous interactions<br/>🔴 Bottleneck: Still LLM-dominated but improved<br/>📊 Architecture: Manager→Tool (context-aware)
+    Client-->>User: "Đèn 1 turned off"
+    
+    Note over User,MCP: Breakdown: Manager 3.08s, MCP init 1.29s,<br/>LLM 5.08s, MCP calls 4.50s 🔴

@@ -53,7 +53,7 @@ class ManagerAgent(BaseAgent):
     def __init__(self, 
                  session_id: str,
                  conversation_id: str,
-                 model: str = "gemini-2.5-pro", 
+                 model: str = "gemini-2.5-flash", 
                  temperature: float = 0.2, 
                  max_iteration: int = 5,
                  verbose: bool = False,
