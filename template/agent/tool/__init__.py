@@ -104,7 +104,9 @@ class ToolAgent:
         
         # Create tool lookup dictionary
         self.tools_dict = {tool.name: tool for tool in self.tools}
-        
+
+        logger.info(colored(f"Tool Agent using model: {self.model}", "green", attrs=["bold"]))
+
         base_llm = ChatVertexAI(
             model_name=self.model,
             temperature=self.temperature,
@@ -461,7 +463,8 @@ class ToolAgent:
             }
         )
         
-        return g.compile(debug=self.verbose)
+        return g.compile(debug=False)  # Disable checkpoint logs for cleaner output
+        # return g.compile(debug=self.verbose) --- IGNORE ---
 
     @property
     def graph(self):

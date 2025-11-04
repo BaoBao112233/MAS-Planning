@@ -152,7 +152,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         
         agent = ManagerAgent(
             temperature=0.2,
-            model=env.MODEL_NAME,
+            model=env.MANAGER_MODEL_NAME,
             verbose=True,
             session_id=request.sessionId,
             conversation_id=request.conversationId,
@@ -279,7 +279,7 @@ async def chat_audio(
         # Process the transcribed text through the chatbot
         agent = ManagerAgent(
             temperature=0.2,
-            model=env.MODEL_NAME,
+            model=env.MANAGER_MODEL_NAME,
             verbose=True,
             session_id=sessionId,
             conversation_id=conversationId

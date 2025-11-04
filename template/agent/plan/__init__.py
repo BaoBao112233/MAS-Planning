@@ -54,6 +54,8 @@ class PlanAgent(BaseAgent):
         self.mcp_client = None
         
         # Initialize LLM
+        logger.info(colored(f"Plan Agent using model: {model}", "green", attrs=["bold"]))
+
         try:
             self.llm = ChatVertexAI(
                 model_name=model,

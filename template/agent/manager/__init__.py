@@ -69,7 +69,9 @@ class ManagerAgent(BaseAgent):
             conversation_id=conversation_id,
             ttl=env.TTL_SECONDS
         )
-        
+
+        logger.info(colored(f"Manager Agent using model: {model}", "green", attrs=["bold"]))
+
         # LLM configuration
         if llm:
             self.llm = llm
@@ -103,7 +105,7 @@ class ManagerAgent(BaseAgent):
         """Lazy load Plan Agent"""
         if self._plan_agent is None:
             from template.agent.plan import PlanAgent
-            self._plan_agent = PlanAgent(verbose=self.verbose, model=env.MODEL_NAME)
+            self._plan_agent = PlanAgent(verbose=self.verbose, model=env.PLAN_MODEL_NAME)
             
             # Initialize async components
             try:
@@ -142,7 +144,7 @@ class ManagerAgent(BaseAgent):
         """Lazy load Tool Agent"""
         if self._tool_agent is None:
             from template.agent.tool import ToolAgent
-            self._tool_agent = ToolAgent(verbose=self.verbose, model=env.MODEL_NAME)
+            self._tool_agent = ToolAgent(verbose=self.verbose, model=env.TOOL_MODEL_NAME)
             # Initialize ToolAgent async components
             try:
                 import asyncio
