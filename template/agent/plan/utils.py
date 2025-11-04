@@ -84,18 +84,16 @@ def extract_llm_response(xml_response: str) -> dict:
     return result
 
 def extract_priority_plans(response):
-    """Extract the 3 priority plans from XML format response"""
+    """Extract the 2 priority plans from XML format response"""
     extracted_data = {
-        'Security_Plan': [],
-        'Convenience_Plan': [],
-        'Energy_Plan': []
+        'Optimized_Plan': [],
+        'Conservative_Plan': []
     }
     
     # First try XML format parsing
     xml_patterns = [
-        (r'<Security_Plan>\s*(.*?)\s*</Security_Plan>', 'Security_Plan'),
-        (r'<Convenience_Plan>\s*(.*?)\s*</Convenience_Plan>', 'Convenience_Plan'),
-        (r'<Energy_Plan>\s*(.*?)\s*</Energy_Plan>', 'Energy_Plan')
+        (r'<Optimized_Plan>\s*(.*?)\s*</Optimized_Plan>', 'Optimized_Plan'),
+        (r'<Conservative_Plan>\s*(.*?)\s*</Conservative_Plan>', 'Conservative_Plan')
     ]
     
     for pattern, plan_key in xml_patterns:
@@ -124,12 +122,10 @@ def extract_priority_plans(response):
             line = line.strip()
             
             # Look for plan headers
-            if "Plan 1:" in line or "Maximum Security" in line or "🥇" in line or "Security" in line:
-                current_plan = 'Security_Plan'
-            elif "Plan 2:" in line or "Balanced Comfort" in line or "🥈" in line or "Convenience" in line:
-                current_plan = 'Convenience_Plan'
-            elif "Plan 3:" in line or "Energy-Efficient" in line or "🥉" in line or "Energy" in line:
-                current_plan = 'Energy_Plan'
+            if "Plan 1:" in line or "Optimized" in line or "🥇" in line or "Security + Convenience" in line:
+                current_plan = 'Optimized_Plan'
+            elif "Plan 2:" in line or "Conservative" in line or "�" in line or "Energy + Security" in line:
+                current_plan = 'Conservative_Plan'
             # Look for numbered tasks or bullet points
             elif current_plan and (re.match(r'^\d+\.', line) or re.match(r'^[-•\*]', line)):
                 # Extract task text (remove number prefix and bullets)
@@ -141,9 +137,8 @@ def extract_priority_plans(response):
         # If we still couldn't find plans, try pattern matching
         if not any(extracted_data.values()):
             plan_patterns = [
-                (r'(?:plan\s+1|security|🥇).*?(?=plan\s+2|convenience|🥈|$)', 'Security_Plan'),
-                (r'(?:plan\s+2|convenience|🥈).*?(?=plan\s+3|energy|🥉|$)', 'Convenience_Plan'),
-                (r'(?:plan\s+3|energy|🥉).*?(?=plan\s+4|custom|$)', 'Energy_Plan')
+                (r'(?:plan\s+1|optimized|🥇).*?(?=plan\s+2|conservative|🥈|$)', 'Optimized_Plan'),
+                (r'(?:plan\s+2|conservative|🥈).*?$', 'Conservative_Plan')
             ]
             
             for pattern, plan_key in plan_patterns:

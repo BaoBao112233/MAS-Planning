@@ -146,8 +146,6 @@ def format_final_response(
     # Format based on agent type
     if agent_type == 'plan':
         return format_plan_response(agent_result, query)
-    elif agent_type == 'meta':
-        return format_meta_response(agent_result, query)
     elif agent_type == 'tool':
         return format_tool_response(agent_result, query)
     else:
@@ -163,50 +161,24 @@ def format_plan_response(agent_result: Dict[str, Any], query: str) -> str:
         plan_options = agent_result.get('plan_options', {})
         if plan_options:
             response = f"🏠 **Smart Home Automation Plans**\n\n"
-            response += f"I've created 3 specialized plans for your request: '{query}'\n\n"
+            response += f"I've created 2 optimized plans for your request: '{query}'\n\n"
             
-            # Security Plan
-            if plan_options.get('security_plan'):
-                response += "🔒 **Plan 1: Security Priority**\n"
-                for i, task in enumerate(plan_options['security_plan'], 1):
+            # Optimized Plan
+            if plan_options.get('optimized_plan'):
+                response += "🥇 **Plan 1: Optimized (Security + Convenience)**\n"
+                for i, task in enumerate(plan_options['optimized_plan'], 1):
                     response += f"   {i}. {task}\n"
                 response += "\n"
             
-            # Convenience Plan
-            if plan_options.get('convenience_plan'):
-                response += "🏡 **Plan 2: Convenience Priority**\n"
-                for i, task in enumerate(plan_options['convenience_plan'], 1):
+            # Conservative Plan
+            if plan_options.get('conservative_plan'):
+                response += "🥈 **Plan 2: Conservative (Energy + Security)**\n"
+                for i, task in enumerate(plan_options['conservative_plan'], 1):
                     response += f"   {i}. {task}\n"
                 response += "\n"
             
-            # Energy Plan
-            if plan_options.get('energy_plan'):
-                response += "⚡ **Plan 3: Energy Efficiency Priority**\n"
-                for i, task in enumerate(plan_options['energy_plan'], 1):
-                    response += f"   {i}. {task}\n"
-                response += "\n"
-            
-            response += "Please select which plan you'd like to implement by saying 'Plan 1', 'Plan 2', or 'Plan 3'."
+            response += "Please select which plan you'd like to implement by saying 'Plan 1' or 'Plan 2'."
             return response
-    
-    return output
-
-
-def format_meta_response(agent_result: Dict[str, Any], query: str) -> str:
-    """Format Meta Agent response"""
-    output = agent_result.get('output', '')
-    agent_data = agent_result.get('agent_data', {})
-    
-    if agent_data:
-        response = f"🧠 **Meta Agent Analysis**\n\n"
-        if agent_data.get('Agent Name'):
-            response += f"**Agent:** {agent_data['Agent Name']}\n"
-        if agent_data.get('Agent Description'):
-            response += f"**Description:** {agent_data['Agent Description']}\n"
-        if agent_data.get('Tasks'):
-            response += f"**Tasks:** {agent_data['Tasks']}\n"
-        response += f"\n**Analysis Result:**\n{output}"
-        return response
     
     return output
 
@@ -232,7 +204,7 @@ def extract_plan_selection(query: str) -> Optional[int]:
         query: User input
         
     Returns:
-        Plan number (1, 2, or 3) or None
+        Plan number (1 or 2) or None
     """
     query_lower = query.lower().strip()
     
@@ -241,24 +213,18 @@ def extract_plan_selection(query: str) -> Optional[int]:
         return 1
     elif 'plan 2' in query_lower or query_lower == '2':
         return 2
-    elif 'plan 3' in query_lower or query_lower == '3':
-        return 3
     
     # Check for alternative formats
     if 'option 1' in query_lower or 'first' in query_lower:
         return 1
     elif 'option 2' in query_lower or 'second' in query_lower:
         return 2
-    elif 'option 3' in query_lower or 'third' in query_lower:
-        return 3
     
     # Check for plan types
-    if 'security' in query_lower:
+    if 'optimized' in query_lower:
         return 1
-    elif 'convenience' in query_lower:
+    elif 'conservative' in query_lower:
         return 2
-    elif 'energy' in query_lower:
-        return 3
     
     return None
 

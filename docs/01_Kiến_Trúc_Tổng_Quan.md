@@ -11,10 +11,10 @@ MAS-Planning (Multi-Agent Smart Home Planning) là một hệ thống multi-agen
 - Phân loại theo 3 loại ưu tiên: Security, Convenience, Energy Efficiency
 - Tích hợp AI để tối ưu hóa quyết định
 
-### 2. **Phân rã nhiệm vụ intelligent**
-- MetaAgent phân tích và chia nhỏ kế hoạch phức tạp thành các tasks cụ thể
-- Context-aware task decomposition
-- Dependency management giữa các tasks
+### 2. **Orchestration thông minh**
+- ManagerAgent điều phối và điều hướng request đến agent phù hợp
+- Context-aware routing decisions
+- Multi-agent workflow management
 
 ### 3. **Thực thi tự động**
 - ToolAgent gọi MCP tools để điều khiển thiết bị real-time
@@ -49,7 +49,6 @@ graph TB
     
     subgraph "Specialized Agents"
         F --> H[Plan Agent]
-        F --> I[Meta Agent]
         F --> J[Tool Agent]
     end
     
@@ -68,7 +67,6 @@ graph TB
     
     style D fill:#e1f5fe
     style H fill:#f3e5f5
-    style I fill:#e8f5e8
     style J fill:#fff3e0
 ```
 
@@ -92,23 +90,15 @@ graph TB
   - Task execution orchestration
 - **Technology**: StateGraph workflows, API integration
 
-### 3. **Meta Agent** (Analytical Processor)
-- **Vai trò**: Phân tích và xử lý tasks phức tạp
-- **Chức năng**:
-  - Task decomposition và analysis
-  - Context-aware reasoning
-  - XML parsing cho structured data
-  - Strategic decision making
-- **Technology**: Advanced prompting, XML processing
+### 3. **Tool Agent** (Execution Engine)
 
-### 4. **Tool Agent** (Execution Engine)
 - **Vai trò**: Thực thi concrete actions thông qua MCP tools
 - **Chức năng**:
   - MCP tools integration
   - Device control và automation
   - Authentication handling (token-based)
   - Real-time device interaction
-- **Technology**: Model Context Protocol (MCP), async processing
+- **Technology**: Model Context Protocol (MCP), async processing, LangGraph workflows
 
 ## 🔄 Workflow luồng xử lý
 
@@ -123,8 +113,9 @@ Plan Request → Plan Agent → LLM Generation → 3 Priority Plans → User Sel
 ```
 
 ### 3. **Plan Execution Flow**
+
 ```
-Selected Plan → Meta Agent Analysis → Tool Agent Execution → Status Updates → Completion
+Selected Plan → Plan Agent Orchestration → Tool Agent Execution → Status Updates → Completion
 ```
 
 ### 4. **Device Control Flow**
@@ -135,10 +126,10 @@ Control Command → Tool Agent → MCP Server → Device API → Action Result
 ## 🏗️ Thiết kế kiến trúc
 
 ### **Separation of Concerns**
-- **Manager**: Orchestration và user interaction
-- **Plan**: Strategic planning và workflow management
-- **Meta**: Analysis và reasoning
-- **Tool**: Concrete execution và device control
+
+- **Manager**: Orchestration, routing, và user interaction
+- **Plan**: Strategic planning, workflow management, task orchestration
+- **Tool**: Concrete execution, device control, MCP integration
 
 ### **Scalability Design**
 - Lazy loading của sub-agents để optimize memory

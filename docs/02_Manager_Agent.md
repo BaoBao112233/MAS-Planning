@@ -14,16 +14,13 @@ graph TD
     B --> E[Agent Delegation]
     
     E --> F[Plan Agent]
-    E --> G[Meta Agent]  
     E --> H[Tool Agent]
     E --> I[Direct Response]
     
     F --> J[Plan Creation/Execution]
-    G --> K[Task Analysis]
     H --> L[Device Control]
     
     J --> M[Response Formatting]
-    K --> M
     L --> M
     I --> M
     
@@ -389,7 +386,6 @@ def get_system_status(self) -> Dict[str, Any]:
         'manager_status': 'active',
         'sub_agents': {
             'plan_agent': self._plan_agent is not None,
-            'meta_agent': self._meta_agent is not None,
             'tool_agent': self._tool_agent is not None
         },
         'cached_plans': len(self._cached_plan_options) > 0,

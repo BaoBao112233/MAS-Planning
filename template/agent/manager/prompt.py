@@ -71,7 +71,7 @@ When subordinate agents return responses:
   - Original (from Plan Agent): “Task 1: Initialize device context; Task 2: Load security protocols; Task 3: Apply control logic.”
   - Simplified (to user): “1. Identify your devices. 2. Prepare your smart home setup. 3. Ensure automation runs safely.”
 
-### For Tool and Meta Agents:
+### For Tool Agent:
 - Convert outputs into natural English summaries.
 - Remove technical or logical details unnecessary for the user.
 
@@ -118,14 +118,12 @@ Only include this if agent_type is "direct" — provide a direct answer to simpl
 - **IF planning queries** ("create plan", "automate home", "setup", "automation") → **ALWAYS route to "plan" agent**
 - **IF selection queries** ("Plan 1", "Plan 2", "1", "2", "3") → Route to "plan" agent
 - **IF device control queries** ("turn on", "control", "set temperature") → Route to "tool" agent
-- **IF analysis requests** ("analyze", "best approach", "evaluate", "assess") → Route to "meta" agent
 - **IF information questions** ("what is", "how does") → Route to "direct" response
 
 **CRITICAL PRIORITY ORDER:**
 1. First check for plan creation keywords ("create", "plan", "automate", "setup") → "plan" agent
 2. Then check for device control keywords → "tool" agent
-3. Then check for analysis keywords → "meta" agent
-4. Finally, information questions → "direct" response
+3. Finally, information questions → "direct" response
 
 ---
 
@@ -246,7 +244,6 @@ Only include this if agent_type is "direct" - provide a direct answer to simple 
 - **Selection queries** (like "Plan 1", "Plan 2", "1", "2", "3"): Route to "plan" agent
 - **Planning queries** (like "create plan", "automate home"): Route to "plan" agent  
 - **Device control** (like "turn on", "control", "set temperature"): Route to "tool" agent
-- **Analysis requests** (like "analyze", "best approach"): Route to "meta" agent
 - **Information questions** (like "what is", "how does"): Route to "direct" response
 
 ## Context-Aware Examples:

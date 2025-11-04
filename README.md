@@ -1,11 +1,11 @@
 # MAS-Planning — Multi-Agent Smart Home Planning
 
-Hệ thống MAS-Planning là một dự án multi-agent automation cho smart home sử dụng Model Context Protocol (MCP). Dự án tích hợp Google Cloud Vertex AI, LangGraph/StateGraph để điều phối luồng công việc giữa các agent: PlanAgent, MetaAgent, và ToolAgent.
+Hệ thống MAS-Planning là một dự án multi-agent automation cho smart home sử dụng Model Context Protocol (MCP). Dự án tích hợp Google Cloud Vertex AI, LangGraph/StateGraph để điều phối luồng công việc giữa các agent: ManagerAgent, PlanAgent, và ToolAgent.
 
 ## 🎯 Mục tiêu
 
 - **Sinh kế hoạch thông minh**: Tạo kế hoạch ưu tiên từ input (camera phát hiện người, sensor data)
-- **Phân rã nhiệm vụ**: MetaAgent phân tích và chia nhỏ kế hoạch thành các tasks cụ thể
+- **Điều phối thông minh**: ManagerAgent phân tích và điều hướng request đến agent phù hợp
 - **Thực thi tự động**: ToolAgent gọi MCP tools để điều khiển thiết bị (đèn, điều hòa, loa...)
 - **Theo dõi trạng thái**: API integration để upload plans và track task status
 - **Workflow orchestration**: LangGraph StateGraph quản lý luồng giữa các agent
@@ -83,11 +83,11 @@ curl -X POST "http://localhost:9000/ai/chat" \
 
 ```text
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   PlanAgent     │───▶│   MetaAgent     │───▶│   ToolAgent     │
+│  ManagerAgent   │───▶│   PlanAgent     │───▶│   ToolAgent     │
 │                 │    │                 │    │                 │
-│ • Plan creation │    │ • Task analysis │    │ • MCP tools     │
-│ • Orchestration │    │ • XML parsing   │    │ • Device control│
-│ • API upload    │    │ • Context aware │    │ • Execution     │
+│ • Route queries │    │ • Plan creation │    │ • MCP tools     │
+│ • Agent select  │    │ • Orchestration │    │ • Device control│
+│ • Context aware │    │ • API upload    │    │ • Execution     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -108,16 +108,16 @@ curl -X POST "http://localhost:9000/ai/chat" \
 ├── main.py                     # FastAPI server entry point
 ├── template/
 │   ├── agent/
+│   │   ├── manager/           # ManagerAgent - Request routing
+│   │   │   ├── __init__.py    # Main ManagerAgent class
+│   │   │   ├── prompt.py      # Routing prompts
+│   │   │   ├── state.py       # State definitions
+│   │   │   └── utils.py       # Helper functions
 │   │   ├── plan/              # PlanAgent - Plan creation & orchestration
 │   │   │   ├── __init__.py    # Main PlanAgent class
 │   │   │   ├── prompts.py     # Planning prompts
 │   │   │   ├── state.py       # State definitions
 │   │   │   └── utils.py       # Helper functions
-│   │   ├── meta/              # MetaAgent - Task analysis
-│   │   │   ├── __init__.py    # MetaAgent class
-│   │   │   ├── prompt.py      # Meta analysis prompts
-│   │   │   ├── state.py       # State management
-│   │   │   └── utils.py       # XML parsing utilities
 │   │   └── tool/              # ToolAgent - MCP tool execution
 │   │       ├── __init__.py    # ToolAgent class
 │   │       └── (MCP integration)
@@ -139,14 +139,15 @@ curl -X POST "http://localhost:9000/ai/chat" \
 ## 🔧 Workflow chi tiết
 
 1. **Input Processing**: User gửi message qua `/ai/chat` endpoint
-2. **Plan Generation**: PlanAgent tạo 3 kế hoạch ưu tiên (Security, Convenience, Energy)
-3. **User Selection**: User chọn plan (1, 2, hoặc 3)
-4. **API Upload**: Plan được upload lên external API (nếu cấu hình)
-5. **Task Execution**:
-   - MetaAgent phân tích từng task
-   - ToolAgent thực thi qua MCP tools
+2. **Request Routing**: ManagerAgent phân tích và điều hướng đến agent phù hợp
+3. **Plan Generation**: PlanAgent tạo 3 kế hoạch ưu tiên (Security, Convenience, Energy)
+4. **User Selection**: User chọn plan (1, 2, hoặc 3)
+5. **API Upload**: Plan được upload lên external API (nếu cấu hình)
+6. **Task Execution**:
+   - PlanAgent điều phối thực thi plan
+   - ToolAgent thực thi từng task qua MCP tools
    - Cập nhật task status qua API
-6. **Completion**: Báo cáo kết quả và hoàn thành plan
+7. **Completion**: Báo cáo kết quả và hoàn thành plan
 
 ## 📋 Requirements
 
@@ -190,8 +191,8 @@ python main.py --log-level DEBUG
 
 Key log patterns:
 
+- `template.agent.manager` - ManagerAgent routing
 - `template.agent.plan` - PlanAgent operations
-- `template.agent.meta` - MetaAgent analysis
 - `template.agent.tool` - ToolAgent execution
 
 ### Troubleshooting
@@ -212,11 +213,6 @@ Key log patterns:
 
 - Do conflict giữa uvicorn và asyncio
 - Fix bằng cách dùng startup events thay vì `asyncio.run()`
-
-**❌ "XML parse error" từ MetaAgent**
-
-- Kiểm tra prompt format trong `template/agent/meta/prompt.py`
-- LLM response phải chứa valid XML tags
 
 ### Mock MCP Server
 

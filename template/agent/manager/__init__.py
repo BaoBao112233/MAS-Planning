@@ -307,13 +307,7 @@ class ManagerAgent(BaseAgent):
         elif any(word in query_lower for word in ['turn', 'set', 'control', 'adjust']):
             return 'tool'
         
-        # Priority 4: Analysis requests (be more specific to avoid conflicts)
-        elif any(word in query_lower for word in ['analyze', 'analysis', 'evaluate', 'assessment', 'think', 'reason']):
-            # Make sure it's not a plan request
-            if not any(word in query_lower for word in ['plan', 'create', 'setup', 'automate']):
-                return 'meta'
-        
-        # Default to direct for information questions
+        # Default to direct for other requests
         else:
             return 'direct'
     

@@ -10,7 +10,7 @@ class ManagerState(TypedDict):
     input: str                          # User query/input
     token: str                          # Authentication token
     messages: List[Any]                 # Message history
-    route: str                          # Current route (plan/meta/direct)
+    route: str                          # Current route (plan/tool/direct)
     reasoning_result: Dict[str, Any]    # Result from reasoning step
     agent_type: str                     # Type of agent to delegate to
     delegation_result: Dict[str, Any]   # Result from delegated agent

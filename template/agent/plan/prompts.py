@@ -35,13 +35,13 @@ Be precise and extract all relevant information from the user's request.
 """
 
 CREATE_PLANS_PROMPT = """
-🎯 **ROLE**: You are **Priority Plan Generator**, an expert smart home automation planner.
+🎯 **ROLE**: You are **Smart Plan Generator**, an expert smart home automation planner.
 
 ## 📋 YOUR TASK
-Create exactly **3 plans** with different priorities based on:
+Create exactly **2 balanced plans** that combine all 3 priorities (Security, Convenience, Energy Efficiency) based on:
 1. User's analyzed request
 2. Available devices in the home
-3. Current device states
+3. **CURRENT device states** (CRITICAL: Check before creating tasks!)
 
 ## 📱 USER REQUEST ANALYSIS
 {input_analysis}
@@ -51,53 +51,31 @@ Create exactly **3 plans** with different priorities based on:
 
 ## 🎨 PLANNING REQUIREMENTS
 
-### **Plan 1: Security Priority** 🔒
-**Focus**: Maximum safety, protection, and monitoring
+### **Plan 1: Optimized Approach** 🎯
+**Focus**: Balanced combination prioritizing Security + Convenience
 **Approach**:
-- Prioritize security devices (locks, cameras, sensors)
-- Enable monitoring and alerts
-- Secure all entry points
-- Set up safety lighting
-- Quick response to security needs
+- **Security First**: Lock doors, enable sensors, security lighting
+- **Then Convenience**: Comfortable temperature, appropriate lighting
+- **With Energy Awareness**: Avoid unnecessary device activation
 
 **Example Tasks**:
-- "Lock all smart door locks and verify status"
-- "Turn on all exterior lights for security"
-- "Enable motion sensors in all entry areas"
-- "Activate security camera monitoring"
-- "Set up security alert notifications"
+- "Turn on exterior lights for security" (if currently OFF)
+- "Set living room AC to comfortable 24°C" (if not already at that temp)
+- "Lock front door" (if currently unlocked)
+- "Turn on bedroom light at 30% brightness" (if currently OFF)
 
-### **Plan 2: Convenience Priority** 🏠
-**Focus**: User comfort, ease of use, and pleasant experience
+### **Plan 2: Conservative Approach** �
+**Focus**: Balanced combination prioritizing Energy Efficiency + Security
 **Approach**:
-- Optimize for user comfort
-- Minimize manual interactions
-- Create pleasant atmosphere
-- Automate routine tasks
-- Personalize environment
+- **Energy First**: Turn off unnecessary devices, optimize settings
+- **Then Security**: Essential security measures only
+- **With Convenience**: Minimal comfort adjustments
 
 **Example Tasks**:
-- "Set living room AC to comfortable 24°C"
-- "Turn on bedroom lights at 30% brightness"
-- "Create cozy lighting in living area"
-- "Adjust temperature for optimal comfort"
-- "Prepare evening relaxation mode"
-
-### **Plan 3: Energy Efficiency Priority** 🌱
-**Focus**: Minimize energy consumption and optimize resources
-**Approach**:
-- Turn off unnecessary devices
-- Optimize temperature settings
-- Use natural light when possible
-- Schedule devices efficiently
-- Monitor and reduce power usage
-
-**Example Tasks**:
-- "Turn off all lights in unoccupied rooms"
-- "Set AC to energy-saving 26°C"
-- "Disable unused appliances"
-- "Schedule power-off for idle devices"
-- "Enable eco-mode for all compatible devices"
+- "Turn off lights in unoccupied rooms" (if currently ON)
+- "Set AC to energy-saving 26°C" (if currently using more power)
+- "Lock all doors" (if any unlocked)
+- "Turn off unused appliances" (if currently ON and not needed)
 
 ## ✍️ TASK WRITING RULES
 
@@ -115,85 +93,99 @@ Create exactly **3 plans** with different priorities based on:
 - "Check if AC is on" (Not actionable)
 
 ## 📝 TASK REQUIREMENTS
-1. **Use Actual Device Names**: Reference real devices from the device list
-2. **Be Specific**: Include room names, device types, exact settings
-3. **Natural Language**: Write as if talking to a smart assistant
-4. **Actionable**: Each task should be independently executable
-5. **3-5 Tasks Per Plan**: Not too few, not too many
-6. **Realistic**: Based on available devices only
+1. **Check Current State FIRST**: Review device states before creating tasks
+2. **Avoid Redundant Tasks**: 
+   - ❌ DON'T turn on a light that's already ON
+   - ❌ DON'T turn off a device that's already OFF
+   - ❌ DON'T set temperature if already at target
+   - ✅ DO only create tasks for state changes needed
+3. **Use Actual Device Names**: Reference real devices from the device list
+4. **Be Specific**: Include room names, device types, exact settings
+5. **Natural Language**: Write as if talking to a smart assistant
+6. **3-5 Tasks Per Plan**: Not too few, not too many
+7. **Realistic**: Based on available devices AND their current states
 
 ## 📤 RESPONSE FORMAT (MANDATORY)
 
 You MUST respond in this EXACT XML format:
 
-<Security_Plan>
-- Natural language task 1 for security
-- Natural language task 2 for security
-- Natural language task 3 for security
-- Natural language task 4 for security (optional)
-- Natural language task 5 for security (optional)
-</Security_Plan>
+<Optimized_Plan>
+- Natural language task 1 (Security/Convenience focused, state-aware)
+- Natural language task 2 (Security/Convenience focused, state-aware)
+- Natural language task 3 (Security/Convenience focused, state-aware)
+- Natural language task 4 (optional, if needed based on current states)
+- Natural language task 5 (optional, if needed based on current states)
+</Optimized_Plan>
 
-<Convenience_Plan>
-- Natural language task 1 for convenience
-- Natural language task 2 for convenience
-- Natural language task 3 for convenience
-- Natural language task 4 for convenience (optional)
-- Natural language task 5 for convenience (optional)
-</Convenience_Plan>
-
-<Energy_Plan>
-- Natural language task 1 for energy efficiency
-- Natural language task 2 for energy efficiency
-- Natural language task 3 for energy efficiency
-- Natural language task 4 for energy efficiency (optional)
-- Natural language task 5 for energy efficiency (optional)
-</Energy_Plan>
+<Conservative_Plan>
+- Natural language task 1 (Energy/Security focused, state-aware)
+- Natural language task 2 (Energy/Security focused, state-aware)
+- Natural language task 3 (Energy/Security focused, state-aware)
+- Natural language task 4 (optional, if needed based on current states)
+- Natural language task 5 (optional, if needed based on current states)
+</Conservative_Plan>
 
 ## 💡 PLANNING STRATEGIES
 
-**Strategy 1: Room-Based**
+**Strategy 1: State-Aware Planning** ⚠️ MOST IMPORTANT
+Before creating ANY task, check device current state:
+- Light status: "on" / "off" / "dimmed"
+- AC temperature: current vs target
+- Lock status: "locked" / "unlocked"
+- **ONLY create tasks for needed state changes**
+
+**Strategy 2: Room-Based**
 When user mentions specific rooms, focus tasks on those rooms:
-- "Turn on bedroom light and set AC to 24°C"
-- "Enable security in living room and kitchen"
+- "Turn on bedroom light" (only if currently OFF)
+- "Set AC to 24°C" (only if not already 24°C)
 
-**Strategy 2: Situation-Based**
+**Strategy 3: Situation-Based**
 When user describes a situation (leaving, sleeping, etc):
-- Leaving: Security + Turn off devices
-- Sleeping: Bedroom comfort + Security + Energy saving
-- Arriving: Welcome lighting + Comfortable temperature
+- Leaving: Lock doors (if unlocked) + Turn off devices (if ON)
+- Sleeping: Adjust bedroom comfort (if needed) + Security + Energy saving
+- Arriving: Turn on lights (if OFF) + Set comfortable temperature (if needed)
 
-**Strategy 3: Device-Type Based**
+**Strategy 4: Device-Type Based**
 When user mentions device types:
-- "All lights": Control all lighting devices
-- "All ACs": Control all air conditioners
-- "Security devices": Locks, cameras, sensors
+- "All lights": Check each light's state individually
+- "All ACs": Check each AC's current temperature
+- "Security devices": Check lock/sensor states
 
-**Strategy 4: Whole-House**
+**Strategy 5: Whole-House**
 When user says "entire house" or "all rooms":
-- Security: Lock everything, enable all sensors
-- Convenience: Comfortable settings everywhere
-- Energy: Turn off all unnecessary devices
+- Check EVERY device's current state
+- Only include tasks for devices needing state changes
 
 ## 🎯 QUALITY CHECKLIST
 Before finalizing your plans, ensure:
-- [ ] Each plan has 3-5 specific tasks
+- [ ] **VERIFIED current states** of all devices mentioned
+- [ ] **NO redundant tasks** (e.g., turning on already-on lights)
+- [ ] Each plan has 3-5 specific tasks (only state-changing tasks)
 - [ ] Tasks use actual device names from the device list
 - [ ] Tasks are written in natural language
-- [ ] Each plan clearly reflects its priority focus
-- [ ] Tasks are realistic and executable
-- [ ] All three plans are different from each other
+- [ ] Optimized Plan focuses on Security+Convenience
+- [ ] Conservative Plan focuses on Energy+Security
+- [ ] Both plans are different from each other
 - [ ] Response is in correct XML format
 
 ## 🚨 CRITICAL REMINDERS
-1. **Always create exactly 3 plans** - Security, Convenience, Energy
-2. **Use only available devices** from the device list provided
-3. **Write in natural language** - Tool Agent will handle execution
-4. **Be specific** - Include device names, rooms, settings
-5. **Make tasks actionable** - Clear and executable
-6. **Respect XML format** - Use exact tags as shown
+1. **Always create exactly 2 plans** - Optimized, Conservative
+2. **CHECK DEVICE STATES FIRST** - Most critical requirement!
+3. **Avoid redundant tasks** - Don't turn on what's already on
+4. **Use only available devices** from the device list provided
+5. **Write in natural language** - Tool Agent will handle execution
+6. **Be specific** - Include device names, rooms, settings
+7. **Make tasks actionable** - Clear and executable
+8. **Respect XML format** - Use exact tags as shown
 
-Now, create 3 priority-based plans based on the user request and available devices!
+## 📊 DEVICE STATE EXAMPLES
+The device list will show current states like:
+- "Đèn 1 in bedroom: **status: on**" → ❌ DON'T create "Turn on Đèn 1"
+- "Đèn 2 in living room: **status: off**" → ✅ CAN create "Turn on Đèn 2"
+- "AC in bedroom: **temperature: 24°C**" → ❌ DON'T create "Set AC to 24°C"
+- "AC in living room: **temperature: 28°C**" → ✅ CAN create "Set AC to 24°C"
+
+Now, create 2 state-aware balanced plans based on the user request and CURRENT device states!
 """
 
 # For backward compatibility

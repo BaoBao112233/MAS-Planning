@@ -3,7 +3,7 @@ Optimized Plan Agent for MAS-Planning system
 Clear workflow:
 1. Analyze user input
 2. Call get_device_list tool to get device information
-3. Create 3 priority plans (Security, Convenience, Energy)
+3. Create 2 priority plans (Optimized, Conservative)
 4. Execute selected plan with status updates
 """
 from template.agent import BaseAgent
@@ -17,7 +17,7 @@ from template.agent.plan.prompts import (
     UPDATE_PLAN_PROMPTS
 )
 from template.agent.tool import ToolAgent
-from template.agent.api_client import APIClient
+# from template.agent.api_client import APIClient
 from template.configs.environments import env
 
 from langchain_google_vertexai import ChatVertexAI
@@ -68,7 +68,7 @@ class PlanAgent(BaseAgent):
 
         self.max_iteration = max_iteration
         self.verbose = verbose
-        self.api_client = APIClient()
+        # self.api_client = APIClient()
         self.tool_agent = None
         
         # Initialize graph
@@ -146,17 +146,16 @@ class PlanAgent(BaseAgent):
         
         # Check if message indicates plan selection
         input_msg = state.get('input', '').strip().lower()
-        selection_keywords = ['plan 1', 'plan 2', 'plan 3', '1', '2', '3', 
-                             'plan a', 'plan b', 'plan c', 'a', 'b', 'c']
+        selection_keywords = ['plan 1', 'plan 2', '1', '2', 
+                             'plan a', 'plan b', 'a', 'b',
+                             'optimized', 'conservative']
         
         if any(keyword == input_msg for keyword in selection_keywords):
             # Map selection to plan ID
-            if input_msg in ['plan 1', '1', 'plan a', 'a']:
+            if input_msg in ['plan 1', '1', 'plan a', 'a', 'optimized']:
                 selected_plan_id = 1
-            elif input_msg in ['plan 2', '2', 'plan b', 'b']:
+            elif input_msg in ['plan 2', '2', 'plan b', 'b', 'conservative']:
                 selected_plan_id = 2
-            elif input_msg in ['plan 3', '3', 'plan c', 'c']:
-                selected_plan_id = 3
             
             return {**state, 'plan_type': 'execute', 'selected_plan_id': selected_plan_id}
         
@@ -168,7 +167,7 @@ class PlanAgent(BaseAgent):
         Main workflow:
         1. Analyze user input
         2. Call get_device_list to get device information
-        3. Create 3 priority plans
+        3. Create 2 priority plans
         """
         user_input = state.get('input', '')
         token = state.get('token', '')
@@ -207,19 +206,18 @@ class PlanAgent(BaseAgent):
         else:
             logger.warning(colored("⚠️ No token provided - cannot retrieve devices", "yellow"))
         
-        # Step 3: Create 3 priority plans
+        # Step 3: Create 2 priority plans
         if self.verbose:
             logger.info(colored("\n" + "="*80, "cyan"))
-            logger.info(colored("🎯 STEP 3: CREATING 3 PRIORITY PLANS", "cyan", attrs=["bold"]))
+            logger.info(colored("🎯 STEP 3: CREATING 2 PRIORITY PLANS", "cyan", attrs=["bold"]))
             logger.info(colored("="*80, "cyan"))
         
         plan_options = self._create_priority_plans(user_input, input_analysis, device_info)
         
         if self.verbose:
             logger.info(colored("✅ Plans created successfully", "green", attrs=["bold"]))
-            logger.info(f"🔒 Security Plan: {len(plan_options.get('security_plan', []))} tasks")
-            logger.info(f"🏠 Convenience Plan: {len(plan_options.get('convenience_plan', []))} tasks")
-            logger.info(f"🌱 Energy Plan: {len(plan_options.get('energy_plan', []))} tasks")
+            logger.info(f"🥇 Optimized Plan: {len(plan_options.get('optimized_plan', []))} tasks")
+            logger.info(f"🥈 Conservative Plan: {len(plan_options.get('conservative_plan', []))} tasks")
             logger.info(colored("="*80 + "\n", "cyan"))
         
         # Format plans for output
@@ -368,7 +366,7 @@ class PlanAgent(BaseAgent):
         )
         
         messages = convert_messages_list([
-            SystemMessage("You are an expert smart home planner. Always create exactly 3 plans in the specified XML format."),
+            SystemMessage("You are an expert smart home planner. Always create exactly 2 plans in the specified XML format."),
             HumanMessage(prompt)
         ])
         
@@ -385,14 +383,13 @@ class PlanAgent(BaseAgent):
             plan_data = extract_priority_plans(llm_response.content)
             
             # Validate plans
-            if not any(plan_data.get(key) for key in ['Security_Plan', 'Convenience_Plan', 'Energy_Plan']):
+            if not any(plan_data.get(key) for key in ['Optimized_Plan', 'Conservative_Plan']):
                 logger.warning(colored("⚠️ No valid plans extracted, using fallback", 'yellow'))
                 plan_data = self._get_fallback_plans()
             
             return {
-                'security_plan': plan_data.get('Security_Plan', []),
-                'convenience_plan': plan_data.get('Convenience_Plan', []),
-                'energy_plan': plan_data.get('Energy_Plan', [])
+                'optimized_plan': plan_data.get('Optimized_Plan', []),
+                'conservative_plan': plan_data.get('Conservative_Plan', [])
             }
             
         except Exception as e:
@@ -472,22 +469,16 @@ class PlanAgent(BaseAgent):
     def _get_fallback_plans(self) -> dict:
         """Generate fallback plans when LLM fails"""
         return {
-            'security_plan': [
+            'optimized_plan': [
                 'Lock all smart door locks and verify status',
-                'Turn on all exterior lights for security',
-                'Enable motion sensors in all entry areas',
-                'Activate security camera monitoring'
-            ],
-            'convenience_plan': [
                 'Set living room AC to comfortable 24°C',
-                'Turn on bedroom lights at 30% brightness',
-                'Create cozy lighting in main areas',
-                'Adjust temperature for optimal comfort'
+                'Turn on all essential interior lights',
+                'Enable motion sensors in all entry areas'
             ],
-            'energy_plan': [
+            'conservative_plan': [
+                'Lock all smart door locks and verify status',
                 'Turn off all lights in unoccupied rooms',
                 'Set AC to energy-saving 26°C',
-                'Disable unused appliances and devices',
                 'Enable eco-mode for all compatible devices'
             ]
         }
@@ -563,9 +554,8 @@ class PlanAgent(BaseAgent):
         
         # Select plan
         plan_mapping = {
-            1: ('security_plan', 'Security Priority Plan'),
-            2: ('convenience_plan', 'Convenience Priority Plan'),
-            3: ('energy_plan', 'Energy Efficiency Priority Plan')
+            1: ('optimized_plan', 'Optimized Plan (Security + Convenience)'),
+            2: ('conservative_plan', 'Conservative Plan (Energy + Security)')
         }
         
         if selected_plan_id not in plan_mapping:
@@ -581,21 +571,21 @@ class PlanAgent(BaseAgent):
                 logger.info(f'   {i}. {task}')
         
         # Upload plan to API
-        if self.api_client:
-            plan_data = {
-                "input": state.get('input', ''),
-                "plan_type": plan_type.lower().replace(' ', '_'),
-                "current_plan": selected_plan,
-                "status": "created"
-            }
+        # if self.api_client:
+        #     plan_data = {
+        #         "input": state.get('input', ''),
+        #         "plan_type": plan_type.lower().replace(' ', '_'),
+        #         "current_plan": selected_plan,
+        #         "status": "created"
+        #     }
             
-            try:
-                api_result = self.api_client.create_plan(plan_data)
-                if api_result:
-                    logger.info("📤 Plan uploaded to API successfully")
-                    self.api_client.update_plan_status("in_progress")
-            except Exception as e:
-                logger.error(f"❌ API upload error: {str(e)}")
+        #     try:
+        #         api_result = self.api_client.create_plan(plan_data)
+        #         if api_result:
+        #             logger.info("📤 Plan uploaded to API successfully")
+        #             self.api_client.update_plan_status("in_progress")
+        #     except Exception as e:
+        #         logger.error(f"❌ API upload error: {str(e)}")
         
         # Initialize sub-agents
         self.init_sub_agents()
@@ -619,9 +609,9 @@ class PlanAgent(BaseAgent):
                 # Log task start (thread-safe)
                 logger.info(colored(f"\n🚀 [Thread-{threading.current_thread().name}] Executing Task {task_number}/{len(selected_plan)}: {task}", "cyan", attrs=["bold"]))
                 
-                if self.api_client:
-                    with results_lock:
-                        self.api_client.update_task_status(task, "in_progress")
+                # if self.api_client:
+                #     with results_lock:
+                #         self.api_client.update_task_status(task, "in_progress")
                 
                 # Create new event loop for this thread
                 def call_tool_agent(input_data):
@@ -649,8 +639,8 @@ class PlanAgent(BaseAgent):
                         })
                         completed_tasks.append(task)
                         
-                        if self.api_client:
-                            self.api_client.update_task_status(task, "completed", tool_output)
+                        # if self.api_client:
+                        #     self.api_client.update_task_status(task, "completed", tool_output)
                         
                         logger.info(colored(f"✅ [Thread-{threading.current_thread().name}] Task {task_number} completed", "green"))
                         return ("success", task_number, task, tool_output)
@@ -664,8 +654,8 @@ class PlanAgent(BaseAgent):
                         })
                         failed_tasks.append(task)
                         
-                        if self.api_client:
-                            self.api_client.update_task_status(task, "failed", error_msg)
+                        # if self.api_client:
+                        #     self.api_client.update_task_status(task, "failed", error_msg)
                         
                         logger.error(colored(f"❌ [Thread-{threading.current_thread().name}] Task {task_number} failed: {error_msg}", "red"))
                         return ("failed", task_number, task, error_msg)
@@ -682,8 +672,8 @@ class PlanAgent(BaseAgent):
                     })
                     failed_tasks.append(task)
                     
-                    if self.api_client:
-                        self.api_client.update_task_status(task, "failed", error_msg)
+                    # if self.api_client:
+                    #     self.api_client.update_task_status(task, "failed", error_msg)
                     
                     logger.error(colored(f"❌ [Thread-{threading.current_thread().name}] Task {task_number} exception: {str(e)}", "red"))
                     return ("error", task_number, task, error_msg)
@@ -727,8 +717,8 @@ class PlanAgent(BaseAgent):
                             })
                             failed_tasks.append(task)
                             
-                            if self.api_client:
-                                self.api_client.update_task_status(task, "failed", "Timeout")
+                            # if self.api_client:
+                            #     self.api_client.update_task_status(task, "failed", "Timeout")
                 
                 logger.info(colored(f"\n✨ All tasks completed/timed out", "magenta", attrs=["bold"]))
                 
@@ -741,10 +731,10 @@ class PlanAgent(BaseAgent):
         failed_count = len(failed_tasks)
         success_rate = (completed_count / total_tasks * 100) if total_tasks > 0 else 0
         
-        if self.api_client:
-            final_status = "completed"
-            final_summary = f"Completed {completed_count}/{total_tasks} tasks ({success_rate:.1f}%)"
-            self.api_client.update_plan_status(final_status, final_summary)
+        # if self.api_client:
+        #     final_status = "completed"
+        #     final_summary = f"Completed {completed_count}/{total_tasks} tasks ({success_rate:.1f}%)"
+        #     self.api_client.update_plan_status(final_status, final_summary)
         
         # Generate output
         output = f"🎯 **{plan_type} Execution Complete**\n\n"
