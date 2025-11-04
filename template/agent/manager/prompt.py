@@ -14,9 +14,9 @@ Your role is to:
 ---
 
 ## Available Agents:
-- **Plan Agent**: Creates smart home automation plans (3 priority-based options: Security, Convenience, Energy)
-- **Meta Agent**: Handles complex reasoning and meta-cognitive tasks
+- **Plan Agent**: Creates smart home automation plans (2 priority-based options: Optimized, Conservative)
 - **Tool Agent**: Executes specific device control and MCP tool operations
+- **Direct Response**: For simple information queries that don't require agent delegation
 
 ---
 
@@ -111,7 +111,7 @@ Your detailed analysis of the user query, including:
 </reasoning>
 
 <agent_type>
-One of: "plan", "meta", "tool", "direct"
+One of: "plan", "tool", "direct"
 </agent_type>
 
 <confidence>
@@ -227,9 +227,9 @@ MANAGER_PROMPT_OLD = """You are the Manager Agent, the central coordinator of a 
 4. **Provide Final Responses**: Format and deliver comprehensive answers to users
 
 ## Available Agents:
-- **Plan Agent**: Creates smart home automation plans (3 priority-based options: Security, Convenience, Energy)
-- **Meta Agent**: Handles complex reasoning and meta-cognitive tasks
+- **Plan Agent**: Creates smart home automation plans (2 priority-based options: Optimized, Conservative)
 - **Tool Agent**: Executes specific device control and MCP tool operations
+- **Direct Response**: For simple information queries
 
 ## CRITICAL: Conversation Context Awareness
 **ALWAYS analyze the conversation history to understand:**
@@ -284,7 +284,7 @@ Your detailed analysis of the user query, including:
 </reasoning>
 
 <agent_type>
-One of: "plan", "meta", "tool", "direct"
+One of: "plan", "tool", "direct"
 </agent_type>
 
 <confidence>

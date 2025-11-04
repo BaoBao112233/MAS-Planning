@@ -14,6 +14,7 @@ class PlanState(TypedDict, total=False):
     needs_user_selection: bool  # Flag to indicate if waiting for user selection
     selected_plan_id: Optional[int]  # User's selected plan ID
     token: Optional[str]  # Authentication token for MCP tools
+    input_analysis: Optional[dict]  # Analysis from Manager Agent (avoid duplicate LLM call)
     output: str
 
 class UpdateState(TypedDict):

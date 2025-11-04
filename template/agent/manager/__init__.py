@@ -18,6 +18,7 @@ from template.agent.manager.utils import (
     validate_agent_result,
     get_agent_capabilities
 )
+from template.agent.manager.fast_path import get_fast_path_classifier
 from template.message.message import HumanMessage, SystemMessage
 from template.message.converter import convert_messages_list
 from template.agent.histories import RedisSupportChatHistory
@@ -94,11 +95,17 @@ class ManagerAgent(BaseAgent):
         # Session state for plan persistence
         self._cached_plan_options = {}
         
+        # Fast-path classifier for optimization
+        self.fast_path = get_fast_path_classifier(verbose=self.verbose)
+        self.use_fast_path = True  # Enable/disable fast-path optimization
+        self.fast_path_threshold = 0.90  # Confidence threshold for fast-path
+        
         # Create execution graph
         self.graph = self.create_graph()
         
         if self.verbose:
             logger.info(f"✅ {self.name} initialized successfully")
+            logger.info(f"⚡ Fast-path optimization: {'enabled' if self.use_fast_path else 'disabled'}")
     
     @property
     def plan_agent(self):
@@ -174,11 +181,50 @@ class ManagerAgent(BaseAgent):
     def analyze_query(self, state: ManagerState) -> ManagerState:
         """
         Analyze user query and determine routing strategy with conversation context
+        Uses fast-path optimization for high-confidence device control commands
         """
         user_input = state.get('input', '')
+        token = state.get('token', '')
         
         if self.verbose:
             logger.info(f"🔍 Analyzing query: {user_input}")
+        
+        # ========================================
+        # FAST-PATH OPTIMIZATION
+        # Try pattern-based classification first
+        # ========================================
+        if self.use_fast_path:
+            fast_result = self.fast_path.classify(user_input, token)
+            if fast_result and fast_result['confidence'] >= self.fast_path_threshold:
+                if self.verbose:
+                    logger.info(colored(f"⚡ FAST-PATH ACTIVATED", "green", attrs=["bold"]))
+                    logger.info(colored(f"   Pattern: {fast_result['matched_pattern']}", "green"))
+                    logger.info(colored(f"   Confidence: {fast_result['confidence']:.2f}", "green"))
+                    logger.info(colored(f"   Routing to: {fast_result['agent']} agent", "green"))
+                    logger.info(colored(f"   Skipped: Manager LLM call (~2-3s saved)", "yellow", attrs=["bold"]))
+                
+                # Build fast-path state
+                return {
+                    **state,
+                    'agent_type': fast_result['agent'],
+                    'query_type': fast_result['intent'],
+                    'confidence_score': fast_result['confidence'],
+                    'fast_path_used': True,
+                    'fast_path_result': fast_result,
+                    'reasoning_result': {
+                        'reasoning': f"Fast-path match: {fast_result['matched_pattern']}",
+                        'agent_type': fast_result['agent'],
+                        'confidence': fast_result['confidence'],
+                        'explanation': f"Pattern-based classification with {fast_result['confidence']:.1%} confidence"
+                    }
+                }
+        
+        # ========================================
+        # STANDARD LLM-BASED ANALYSIS
+        # Fall back to LLM when fast-path doesn't match
+        # ========================================
+        if self.verbose:
+            logger.info("🤖 Using LLM analysis (no fast-path match)")
         
         # Build messages with conversation history
         messages = []
@@ -320,6 +366,19 @@ class ManagerAgent(BaseAgent):
         agent_type = state.get('agent_type', 'direct')
         user_input = state.get('input', '')
         
+        # Validate and normalize agent type (only support: direct, plan, tool)
+        valid_agents = ['direct', 'plan', 'tool']
+        if agent_type not in valid_agents:
+            logger.warning(colored(f"⚠️ Invalid agent type '{agent_type}', mapping to valid agent", 'yellow'))
+            # Map unknown types to closest valid agent
+            if 'plan' in agent_type.lower() or 'meta' in agent_type.lower():
+                agent_type = 'plan'
+            elif 'tool' in agent_type.lower() or 'device' in agent_type.lower() or 'control' in agent_type.lower():
+                agent_type = 'tool'
+            else:
+                agent_type = 'direct'
+            logger.info(f"📍 Remapped to: {agent_type} agent")
+        
         if self.verbose:
             logger.info(f"🚀 Routing to {agent_type} agent")
         
@@ -409,7 +468,57 @@ How can I assist you today?"""
                         )
                 else:
                     # New planning request
-                    delegation_result = self.plan_agent.invoke(user_input, token=token)
+                    # Pass Manager's analysis to PlanAgent to avoid duplicate LLM analysis
+                    analysis = state.get('reasoning_result') or {}
+                    
+                    # Enhance analysis with room extraction
+                    user_input_lower = user_input.lower()
+                    rooms_mentioned = []
+                    
+                    # Extract rooms from user input
+                    room_keywords = {
+                        'bedroom': ['bedroom', 'bed room', 'phòng ngủ'],
+                        'living room': ['living room', 'living', 'phòng khách'],
+                        'kitchen': ['kitchen', 'nhà bếp', 'bếp'],
+                        'bathroom': ['bathroom', 'toilet', 'nhà vệ sinh', 'phòng tắm'],
+                        'dining room': ['dining', 'phòng ăn']
+                    }
+                    
+                    for room_name, keywords in room_keywords.items():
+                        if any(kw in user_input_lower for kw in keywords):
+                            rooms_mentioned.append(room_name)
+                    
+                    # Build enhanced analysis
+                    enhanced_analysis = {
+                        'reasoning': analysis.get('reasoning', ''),
+                        'agent_type': analysis.get('agent_type', 'plan'),
+                        'confidence': analysis.get('confidence', 1.0),
+                        'primary_intent': user_input,
+                        'key_requirements': [user_input],
+                        'scope': {
+                            'rooms': rooms_mentioned if rooms_mentioned else [],
+                            'device_types': [],
+                            'all_house': ('all' in user_input_lower or 'whole house' in user_input_lower)
+                        },
+                        'context': {
+                            'time_of_day': 'unknown',
+                            'situation': 'general',
+                            'urgency': 'normal'
+                        },
+                        'priority_hints': {
+                            'security': 33,
+                            'convenience': 33,
+                            'energy': 34
+                        }
+                    }
+                    
+                    if self.verbose:
+                        logger.info(f"📊 Passing enhanced analysis to PlanAgent:")
+                        logger.info(f"   - Rooms detected: {rooms_mentioned if rooms_mentioned else 'None (will use all rooms)'}")
+                        logger.info(f"   - All house: {enhanced_analysis['scope']['all_house']}")
+                        logger.info(f"   - Primary intent: {enhanced_analysis.get('primary_intent', 'N/A')[:100]}")
+                    
+                    delegation_result = self.plan_agent.invoke(user_input, token=token, input_analysis=enhanced_analysis)
                     
                     # Cache plan options for future selections
                     if delegation_result.get('plan_options'):
