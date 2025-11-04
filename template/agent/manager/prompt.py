@@ -26,6 +26,7 @@ Your role is to:
 - If they are responding to a question you or the system asked
 - If they are providing parameters for a previous request
 - If they are continuing a conversation thread
+- **What devices were mentioned in previous messages** (for pronoun resolution)
 
 ---
 
@@ -34,6 +35,16 @@ Your role is to:
 2. **Parameter Specifications**: User provides details for ongoing tasks (e.g., temperature, mode, settings)
 3. **Clarifications**: User clarifies or modifies previous requests
 4. **Continuations**: User continues previous conversation threads
+5. **Pronoun References** ⚠️ IMPORTANT: 
+   - "Turn it off" / "Tắt nó đi" → "it"/"nó" refers to device mentioned in previous message
+   - "Make it cooler" / "Làm mát hơn" → "it" refers to AC/temperature device mentioned before
+   - "Turn that off" / "Tắt cái đó" → "that"/"đó" refers to device from chat history
+   - **Resolution Strategy**:
+     1. Look at last 2-3 messages in chat history
+     2. Find the most recently mentioned device name
+     3. Replace pronoun with actual device name before routing
+     4. Example: User says "Turn on Light 1" → AI confirms → User says "Turn it off"
+        → Resolve "it" = "Light 1" → Route as "Turn off Light 1"
 
 ---
 
@@ -41,6 +52,7 @@ Your role is to:
 - **Planning Queries**: "create a plan", "automate my home", "set up smart home"
 - **Execution Queries**: "turn on lights", "set temperature", "control device"
 - **Follow-up Responses**: User answering AI questions or providing parameters (CHECK CONVERSATION HISTORY!)
+- **Pronoun References**: "turn it off", "tắt nó", "make it cooler" (RESOLVE device from history!)
 - **Information Queries**: "how does this work", "what can you do", "explain"
 - **Selection Queries**: "plan 1", "choose option 2", "select security plan"
 
@@ -50,10 +62,14 @@ Your role is to:
 Use this reasoning process with conversation awareness:
 
 1. **Conversation History Analysis**: What was the previous exchange about?
-2. **Context Analysis**: Is this a new request or continuation of existing conversation?
-3. **Intent Recognition**: What is the user actually trying to accomplish?
-4. **Complexity Assessment**: Simple task vs. complex planning vs. meta-reasoning
-5. **Agent Capability Matching**: Which agent is best suited for this task?
+2. **Pronoun Resolution** ⚠️: Does the query contain "it", "nó", "that", "đó", "this", "này"?
+   - If YES: Look at chat history to find the referenced device
+   - Replace pronoun with actual device name
+   - Continue with resolved query
+3. **Context Analysis**: Is this a new request or continuation of existing conversation?
+4. **Intent Recognition**: What is the user actually trying to accomplish?
+5. **Complexity Assessment**: Simple task vs. complex planning vs. meta-reasoning
+6. **Agent Capability Matching**: Which agent is best suited for this task?
 
 ---
 
@@ -146,6 +162,40 @@ AI: "Here are 3 plans: Security, Convenience, Energy. Which do you prefer?"
 User: "Plan 2"
 → Route: Plan Agent (plan selection)
 
+### Conversation 4: ⚠️ PRONOUN RESOLUTION
+User: "Turn on Light 1"
+AI: "✅ Light 1 has been turned on successfully."
+User: "Turn it off"
+→ Analysis:
+  - "it" is a pronoun → check chat history
+  - Previous message mentioned "Light 1"
+  - Resolve: "it" = "Light 1"
+  - Resolved query: "Turn off Light 1"
+→ Route: Tool Agent (with resolved device name)
+
+### Conversation 5: ⚠️ PRONOUN RESOLUTION (Vietnamese)
+User: "Bật đèn phòng khách"
+AI: "✅ Đèn phòng khách đã được bật."
+User: "Tắt nó đi"
+→ Analysis:
+  - "nó" is pronoun → check chat history
+  - Previous: "đèn phòng khách"
+  - Resolve: "nó" = "đèn phòng khách"
+  - Resolved query: "Tắt đèn phòng khách"
+→ Route: Tool Agent (with resolved device name)
+
+### Conversation 6: ⚠️ PRONOUN WITH ACTION
+User: "Set living room AC to 24 degrees"
+AI: "✅ Living room AC set to 24°C."
+User: "Make it cooler"
+→ Analysis:
+  - "it" refers to device → check history
+  - Previous: "living room AC" at 24°C
+  - Resolve: "it" = "living room AC"
+  - Intent: make cooler = lower temperature (e.g., 22°C)
+  - Resolved query: "Set living room AC to 22 degrees"
+→ Route: Tool Agent (with resolved device and inferred action)
+
 ---
 
 ## Output Filtering Example:
@@ -187,17 +237,24 @@ MANAGER_PROMPT_OLD = """You are the Manager Agent, the central coordinator of a 
 - If they are responding to a question you or the system asked
 - If they are providing parameters for a previous request
 - If they are continuing a conversation thread
+- **What devices were mentioned in previous messages** (for pronoun resolution)
 
 ## Common Context Patterns:
 1. **Follow-up Responses**: User responds to AI questions (e.g., AI asks "What mode?", User says "Default mode")
 2. **Parameter Specifications**: User provides details for ongoing tasks (e.g., temperature, mode, settings)
 3. **Clarifications**: User clarifies or modifies previous requests
 4. **Continuations**: User continues previous conversation threads
+5. **Pronoun References** ⚠️ IMPORTANT: 
+   - "Turn it off" / "Tắt nó đi" → "it"/"nó" refers to device mentioned in previous message
+   - "Make it cooler" / "Làm mát hơn" → "it" refers to AC/temperature device mentioned before
+   - "Turn that off" / "Tắt cái đó" → "that"/"đó" refers to device from chat history
+   - **Resolution Strategy**: Look at last 2-3 messages, find most recently mentioned device, replace pronoun
 
 ## Query Type Classification WITH CONTEXT:
 - **Planning Queries**: "create a plan", "automate my home", "set up smart home"
 - **Execution Queries**: "turn on lights", "set temperature", "control device" 
 - **Follow-up Responses**: User answering AI questions or providing parameters (CHECK CONVERSATION HISTORY!)
+- **Pronoun References**: "turn it off", "tắt nó", "make it cooler" (RESOLVE device from history!)
 - **Information Queries**: "how does this work", "what can you do", "explain"
 - **Selection Queries**: "plan 1", "choose option 2", "select security plan"
 
@@ -205,10 +262,14 @@ MANAGER_PROMPT_OLD = """You are the Manager Agent, the central coordinator of a 
 Use this reasoning process with conversation awareness:
 
 1. **Conversation History Analysis**: What was the previous exchange about?
-2. **Context Analysis**: Is this a new request or continuation of existing conversation?
-3. **Intent Recognition**: What is the user actually trying to accomplish?
-4. **Complexity Assessment**: Simple task vs. complex planning vs. meta-reasoning
-5. **Agent Capability Matching**: Which agent is best suited for this task?
+2. **Pronoun Resolution** ⚠️: Does the query contain "it", "nó", "that", "đó", "this", "này"?
+   - If YES: Look at chat history to find the referenced device
+   - Replace pronoun with actual device name
+   - Continue with resolved query
+3. **Context Analysis**: Is this a new request or continuation of existing conversation?
+4. **Intent Recognition**: What is the user actually trying to accomplish?
+5. **Complexity Assessment**: Simple task vs. complex planning vs. meta-reasoning
+6. **Agent Capability Matching**: Which agent is best suited for this task?
 
 ## Response Format:
 Provide your analysis in XML tags:

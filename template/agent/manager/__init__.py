@@ -103,7 +103,7 @@ class ManagerAgent(BaseAgent):
         """Lazy load Plan Agent"""
         if self._plan_agent is None:
             from template.agent.plan import PlanAgent
-            self._plan_agent = PlanAgent(verbose=self.verbose)
+            self._plan_agent = PlanAgent(verbose=self.verbose, model=env.MODEL_NAME)
             
             # Initialize async components
             try:
@@ -142,7 +142,7 @@ class ManagerAgent(BaseAgent):
         """Lazy load Tool Agent"""
         if self._tool_agent is None:
             from template.agent.tool import ToolAgent
-            self._tool_agent = ToolAgent(verbose=self.verbose)
+            self._tool_agent = ToolAgent(verbose=self.verbose, model=env.MODEL_NAME)
             # Initialize ToolAgent async components
             try:
                 import asyncio

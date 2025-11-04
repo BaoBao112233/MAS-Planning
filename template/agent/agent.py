@@ -11,6 +11,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.agents import AgentExecutor
 from langgraph import StateGraph, START, END
 from langgraph.graph import MessagesState
+from termcolor import colored
 
 from template.configs.environments import get_environment_variables
 from template.schemas.model import (
