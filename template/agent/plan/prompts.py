@@ -31,11 +31,14 @@ Provide a structured analysis in JSON format:
     }}
 }}
 
-**CRITICAL**: 
-- If user mentions "bedroom" → rooms: ["bedroom"] ONLY
-- If user mentions "living room" → rooms: ["living room"] ONLY  
-- If user says "bedroom and kitchen" → rooms: ["bedroom", "kitchen"]
-- If user says nothing about rooms → rooms: [] (use context clues)
+**CRITICAL ROOM EXTRACTION RULES**: 
+- If user mentions SPECIFIC room(s) → rooms: [list those rooms ONLY]
+  * "bật đèn phòng khách" → rooms: ["Living room"]
+  * "tắt quạt phòng ngủ" → rooms: ["Bed room"]  
+  * "bật đèn" WITHOUT room → rooms: [] (ambiguous, let planner decide based on context)
+- If user says "tất cả phòng", "toàn bộ nhà" → all_house: true
+- NEVER assume rooms - extract ONLY what user explicitly mentioned
+- Room name mapping: "phòng khách"="Living room", "phòng ngủ"="Bed room", "nhà bếp"="Kitchen"
 
 Be precise and extract all relevant information from the user's request.
 """
@@ -57,7 +60,10 @@ You are a Smart Home Automation Planner. Create exactly 2 balanced plans.
    - DO NOT control devices in unmentioned rooms
 2. **Check current states**: Only create tasks for needed state changes (don't turn on what's already on)
 3. **Use actual device/button names** from the device list (Focus on accuracy)
-4. **Write in natural language** (e.g., "Turn on bedroom light", "Set bedroom AC to 24°C")
+4. **MANDATORY: ALWAYS include room name in every task**
+   - CORRECT: "Turn on đèn trần in Living room", "Set điều hòa to 24°C in Bed room"
+   - WRONG: "Turn on đèn trần", "Set điều hòa to 24°C" (missing room name)
+   - Each task MUST explicitly state which room the device is in
 5. **3-5 tasks per plan** focusing on the mentioned room(s)
 6. **Focus on user priorities** from the analysis
 7. **Match room context**: If temperature/occupancy mentioned, adjust THAT room's climate control
@@ -78,17 +84,23 @@ You are a Smart Home Automation Planner. Create exactly 2 balanced plans.
 
 ## OUTPUT FORMAT (MANDATORY)
 
+**IMPORTANT**: Every task MUST include the room name explicitly. Format: "Action [device name] in [Room name]"
+
 <Optimized_Plan>
-- Task 1 describing action in natural language
-- Task 2 describing action in natural language
-- Task 3 describing action in natural language
+- Turn on [device name] in [Room name]
+- Set [device name] to [value] in [Room name]
+- Turn off [device name] in [Room name]
 </Optimized_Plan>
 
 <Conservative_Plan>
-- Task 1 describing action in natural language
-- Task 2 describing action in natural language
-- Task 3 describing action in natural language
+- Turn on [device name] in [Room name]
+- Set [device name] to [value] in [Room name]
+- Turn off [device name] in [Room name]
 </Conservative_Plan>
+
+**Examples**:
+✅ CORRECT: "Turn on đèn trần in Living room", "Set điều hòa to 24°C in Bed room"
+❌ WRONG: "Turn on đèn trần", "Set điều hòa to 24°C" (missing room specification)
 
 Create 2 state-aware plans now!
 """

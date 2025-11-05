@@ -745,9 +745,12 @@ class PlanAgent(BaseAgent):
                 tool_output = tool_result.get('output', '')
                 has_error = tool_result.get('error', '')
                 
+                # ✅ Check if output contains failure indicators
+                is_failed = any(indicator in tool_output for indicator in ['❌', 'Failed', 'failed', 'Error', 'error', 'Chưa thể'])
+                
                 # Thread-safe result collection
                 with results_lock:
-                    if tool_output and not has_error:
+                    if tool_output and not has_error and not is_failed:
                         execution_results.append({
                             "task_number": task_number,
                             "task": task,
@@ -762,7 +765,7 @@ class PlanAgent(BaseAgent):
                         logger.info(colored(f"✅ [Thread-{threading.current_thread().name}] Task {task_number} completed", "green"))
                         return ("success", task_number, task, tool_output)
                     else:
-                        error_msg = has_error or 'Unknown error'
+                        error_msg = has_error or tool_output if is_failed else 'Unknown error'
                         execution_results.append({
                             "task_number": task_number,
                             "task": task,
