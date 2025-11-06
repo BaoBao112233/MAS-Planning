@@ -141,7 +141,8 @@ def format_final_response(
         Formatted final response
     """
     if agent_type == 'direct':
-        return agent_result.get('direct_answer', 'I apologize, but I could not process your request.')
+        # Try 'output' first (for fast-path), then 'direct_answer' (legacy)
+        return agent_result.get('output') or agent_result.get('direct_answer', 'I apologize, but I could not process your request.')
     
     # Format based on agent type
     if agent_type == 'plan':

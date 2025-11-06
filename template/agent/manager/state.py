@@ -21,3 +21,5 @@ class ManagerState(TypedDict):
     needs_execution: bool               # Whether user needs execution
     query_type: str                     # Type of query (planning/execution/info)
     confidence_score: float             # Confidence in routing decision
+    fast_path_result: Optional[Any]     # Fast-path classification result
+    fast_path_used: Optional[bool]      # Whether fast-path was used

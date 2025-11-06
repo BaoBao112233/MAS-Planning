@@ -1,23 +1,73 @@
 """
 Fast-path Intent Classifier
-Bypass LLM for simple, high-confidence device control commands
+Phân loại intent và routing cho các loại query khác nhau:
+- device_control: Điều khiển thiết bị (routing: Tool Agent → Manager)
+- show_device_status: Hiển thị trạng thái thiết bị (routing: Manager only)
+- planning: Tạo kế hoạch tự động hóa (routing: Manager → Plan Agent → Tool Agent → Manager)
+- unknown: Query không xác định (routing: Manager only)
 
-Performance: Saves 2-3s by skipping Manager LLM analysis
-Confidence: Returns routing decision with 0.95+ confidence for pattern matches
+Performance target: Sub-second processing for all paths
 """
 
 import re
 import logging
-from typing import Optional, Dict, Tuple, List
+import hashlib
+import time
+import json
+from typing import Optional, Dict, Tuple, List, Any
 from functools import lru_cache
+from dataclasses import dataclass, asdict
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 
+class IntentClass(Enum):
+    """Các loại intent classification"""
+    DEVICE_CONTROL = "device_control"
+    SHOW_DEVICE_STATUS = "show_device_status"
+    PLANNING = "planning"
+    UNKNOWN = "unknown"
+
+
+class ExecutionPath(Enum):
+    """Execution paths cho các loại intent"""
+    TOOL_THEN_MANAGER = "tool_then_manager"  # device_control: Tool → Manager
+    MANAGER_ONLY = "manager_only"  # show_device_status, unknown: Manager only
+    FULL_PLANNING = "full_planning"  # planning: Manager → Plan → Tool → Manager
+
+
+@dataclass
+@dataclass
+class ClassificationResult:
+    """Kết quả phân loại intent"""
+    intent: IntentClass
+    confidence: float
+    execution_path: ExecutionPath
+    method: str  # 'pattern' hoặc 'ml'
+    extracted_params: Dict[str, Any]
+    reasoning: str
+    
+    def to_dict(self) -> Dict:
+        return {
+            'intent': self.intent.value,
+            'confidence': self.confidence,
+            'execution_path': self.execution_path.value,
+            'method': self.method,
+            'extracted_params': self.extracted_params,
+            'reasoning': self.reasoning
+        }
+
+
 class FastPathClassifier:
     """
-    Fast-path intent classification using regex patterns and device validation.
-    Designed for smart home device control commands.
+    Fast-path intent classification với 4 loại chính:
+    1. device_control: Điều khiển thiết bị trực tiếp
+    2. show_device_status: Hiển thị thông tin/trạng thái thiết bị
+    3. planning: Tạo automation plan
+    4. unknown: Không xác định
+    
+    Target processing time: <1 second cho tất cả paths
     """
     
     def __init__(self, verbose: bool = False):
@@ -26,285 +76,257 @@ class FastPathClassifier:
         self._cache_ttl = 60  # 60 seconds
         self._cache_timestamp = {}
         
-        # Comprehensive patterns for device control
+        # Comprehensive patterns for all intent classes
         self.patterns = self._build_patterns()
-        
+    
     def _build_patterns(self) -> List[Dict]:
         """
-        Build comprehensive pattern library for device control.
+        Build comprehensive pattern library for all intent classes.
         Returns list of pattern dictionaries with:
         - regex: compiled regex pattern
-        - intent: intent type
+        - intent: intent class (device_control, show_device_status, planning, unknown)
         - confidence: base confidence score
         - description: human-readable description
         """
         patterns = []
         
         # ==========================================
-        # VIETNAMESE PATTERNS
+        # 1. DEVICE CONTROL PATTERNS
+        # Routing: Tool Agent → Manager (fast execution)
         # ==========================================
         
-        # 1. Basic ON/OFF commands - Vietnamese
+        # Basic ON/OFF commands - Vietnamese & English
         patterns.extend([
             {
                 'regex': re.compile(r'^(bật|mở|turn\s*on|open)\s+(.+?)(?:\s+(?:ở|tại|in|at)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'turn_on',
                 'confidence': 0.95,
-                'description': 'Turn on device (Vietnamese)'
+                'description': 'Turn on device'
             },
             {
                 'regex': re.compile(r'^(tắt|đóng|turn\s*off|close)\s+(.+?)(?:\s+(?:ở|tại|in|at)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'turn_off',
                 'confidence': 0.95,
-                'description': 'Turn off device (Vietnamese)'
+                'description': 'Turn off device'
             },
         ])
         
-        # 2. Temperature/AC control - Vietnamese
+        # Temperature/AC control
         patterns.extend([
             {
                 'regex': re.compile(r'^(?:đặt|set|chỉnh)\s+(?:nhiệt\s*độ|temperature|temp)?\s*(?:điều\s*hòa|ac|máy\s*lạnh)?\s*(?:ở|tại|in|at)?\s*(.+?)?\s*(?:lên|to|thành)?\s*(\d+)\s*(?:độ|°c|degrees?)?', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'set_temperature',
                 'confidence': 0.92,
-                'description': 'Set AC temperature (Vietnamese)'
+                'description': 'Set AC temperature'
             },
             {
                 'regex': re.compile(r'^(?:bật|turn\s*on)\s+(?:điều\s*hòa|ac|máy\s*lạnh)\s+(?:ở|tại|in|at)?\s*(.+?)?\s*(?:ở|at)?\s*(\d+)\s*(?:độ|°c|degrees?)?', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'turn_on_ac_temp',
                 'confidence': 0.93,
-                'description': 'Turn on AC with temperature (Vietnamese)'
+                'description': 'Turn on AC with temperature'
             },
         ])
         
-        # 3. Light brightness control - Vietnamese
+        # Light brightness control
         patterns.extend([
             {
                 'regex': re.compile(r'^(?:đặt|set|chỉnh)\s+(?:độ\s*sáng|brightness)?\s*(?:đèn|light)?\s*(?:ở|tại|in|at)?\s*(.+?)?\s*(?:lên|to|thành)?\s*(\d+)\s*(?:%|percent)?', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'set_brightness',
                 'confidence': 0.91,
-                'description': 'Set light brightness (Vietnamese)'
+                'description': 'Set light brightness'
             },
         ])
         
-        # 4. Fan speed control - Vietnamese
+        # Fan speed control
         patterns.extend([
             {
                 'regex': re.compile(r'^(?:đặt|set|chỉnh)\s+(?:tốc\s*độ|speed)?\s*(?:quạt|fan)?\s*(?:ở|tại|in|at)?\s*(.+?)?\s*(?:lên|to|thành)?\s*(cao|thấp|trung\s*bình|high|low|medium|auto|\d+)', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'set_fan_speed',
                 'confidence': 0.90,
-                'description': 'Set fan speed (Vietnamese)'
+                'description': 'Set fan speed'
             },
         ])
         
-        # 5. Curtain/Blind control - Vietnamese
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(mở|open)\s+(?:rèm|cửa\s*sổ|curtain|blind)?\s*(?:ở|tại|in|at)?\s*(.+?)?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'open_curtain',
-                'confidence': 0.94,
-                'description': 'Open curtain/blind (Vietnamese)'
-            },
-            {
-                'regex': re.compile(r'^(đóng|close)\s+(?:rèm|cửa\s*sổ|curtain|blind)?\s*(?:ở|tại|in|at)?\s*(.+?)?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'close_curtain',
-                'confidence': 0.94,
-                'description': 'Close curtain/blind (Vietnamese)'
-            },
-        ])
-        
-        # ==========================================
-        # ENGLISH PATTERNS
-        # ==========================================
-        
-        # 6. Basic ON/OFF - English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^turn\s+(on|off)\s+(?:the\s+)?(.+?)(?:\s+in\s+(?:the\s+)?(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'turn_on_off',
-                'confidence': 0.96,
-                'description': 'Turn on/off device (English)'
-            },
-            {
-                'regex': re.compile(r'^switch\s+(on|off)\s+(?:the\s+)?(.+?)(?:\s+in\s+(?:the\s+)?(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'switch',
-                'confidence': 0.95,
-                'description': 'Switch device (English)'
-            },
-        ])
-        
-        # 7. Temperature control - English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^set\s+(?:the\s+)?(?:ac|air\s*conditioner|temperature)?\s*(?:in\s+(?:the\s+)?(.+?))?\s*to\s+(\d+)\s*(?:degrees?|°c)?', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'set_temperature',
-                'confidence': 0.93,
-                'description': 'Set temperature (English)'
-            },
-        ])
-        
-        # 8. All devices control - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(bật|tắt|turn\s*on|turn\s*off)\s+(?:tất\s*cả|all)\s+(?:đèn|light|lights)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'all_lights',
-                'confidence': 0.93,
-                'description': 'Control all lights'
-            },
-            {
-                'regex': re.compile(r'^(bật|tắt|turn\s*on|turn\s*off)\s+(?:tất\s*cả|all)\s+(?:thiết\s*bị|devices?)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'all_devices',
-                'confidence': 0.91,
-                'description': 'Control all devices'
-            },
-        ])
-        
-        # 9. Device type control - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(bật|tắt|turn\s*on|turn\s*off)\s+(?:tất\s*cả|all)?\s*(đèn|light|điều\s*hòa|ac|quạt|fan|rèm|curtain)s?(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'device_type',
-                'confidence': 0.92,
-                'description': 'Control by device type'
-            },
-        ])
-        
-        # 10. Scene/Mode activation - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(?:kích\s*hoạt|activate|chạy|run|bật|turn\s*on)\s+(?:scene|cảnh|chế\s*độ|mode)\s+(.+?)$', re.IGNORECASE),
-                'intent': 'scene_control',
-                'action': 'activate_scene',
-                'confidence': 0.89,
-                'description': 'Activate scene/mode'
-            },
-        ])
-        
-        # 11. Numbered device control - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(bật|tắt|turn\s*on|turn\s*off|open|close|mở|đóng)\s+(.+?)\s*(\d+)(?:\s+(?:ở|tại|in|at)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'numbered_device',
-                'confidence': 0.94,
-                'description': 'Control numbered device (e.g., Light 1)'
-            },
-        ])
-        
-        # 12. Smart commands - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(?:i\'m\s+)?(?:tôi|i)\s+(?:về|đi\s*ngủ|leaving|going\s+to\s+sleep|home)$', re.IGNORECASE),
-                'intent': 'scene_control',
-                'action': 'smart_scene',
-                'confidence': 0.87,
-                'description': 'Smart scene shortcuts'
-            },
-            {
-                'regex': re.compile(r'^(?:good\s+)?(morning|night|afternoon|evening|sáng|tối|chiều|trưa)$', re.IGNORECASE),
-                'intent': 'scene_control',
-                'action': 'time_based_scene',
-                'confidence': 0.85,
-                'description': 'Time-based scene'
-            },
-        ])
-        
-        # 13. Multi-device control - Vietnamese & English
+        # Multi-device control
         patterns.extend([
             {
                 'regex': re.compile(r'^(bật|tắt|turn\s*on|turn\s*off)\s+(.+?)\s+(?:và|and)\s+(.+?)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
-                'intent': 'device_control',
+                'intent': IntentClass.DEVICE_CONTROL,
                 'action': 'multi_device',
                 'confidence': 0.88,
                 'description': 'Control multiple devices'
             },
         ])
         
-        # 14. Color control - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(?:đặt|set|chỉnh)\s+(?:màu|color)\s+(?:đèn|light)?\s*(?:ở|in)?\s*(.+?)?\s*(?:thành|to)\s+(red|blue|green|yellow|white|warm|cool|đỏ|xanh|vàng|trắng|ấm|mát)', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'set_color',
-                'confidence': 0.90,
-                'description': 'Set light color'
-            },
-        ])
+        # ==========================================
+        # 2. SHOW DEVICE STATUS PATTERNS
+        # Routing: Manager only (use get_device_list)
+        # ==========================================
         
-        # 15. Volume control - Vietnamese & English
+        # Device status queries - Vietnamese & English
         patterns.extend([
             {
-                'regex': re.compile(r'^(?:đặt|set|chỉnh)\s+(?:âm\s*lượng|volume)\s*(?:ở|in)?\s*(.+?)?\s*(?:lên|to)?\s*(\d+)\s*(?:%|percent)?', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'set_volume',
-                'confidence': 0.91,
-                'description': 'Set volume'
+                'regex': re.compile(r'^(?:trạng\s*thái|status|tình\s*trạng)\s+(?:của\s+)?(.+?)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'get_status',
+                'confidence': 0.94,
+                'description': 'Get device status'
             },
             {
-                'regex': re.compile(r'^(tăng|giảm|increase|decrease|raise|lower)\s+(?:âm\s*lượng|volume)(?:\s+(?:ở|in)\s+(.+?))?', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'adjust_volume',
-                'confidence': 0.90,
-                'description': 'Adjust volume'
-            },
-        ])
-        
-        # 16. Lock/Unlock control - Vietnamese & English
-        patterns.extend([
-            {
-                'regex': re.compile(r'^(khóa|mở\s*khóa|lock|unlock)\s+(?:cửa|door)?\s*(?:ở|in)?\s*(.+?)?$', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'lock_unlock',
+                'regex': re.compile(r'^(?:hiển\s*thị|show|list|liệt\s*kê)\s+(?:tất\s*cả\s+)?(?:thiết\s*bị|device|devices?)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'list_devices',
                 'confidence': 0.96,
-                'description': 'Lock/unlock door'
+                'description': 'Show all devices'
+            },
+            {
+                'regex': re.compile(r'^(?:cho|give|let)\s+(?:tôi|mình|me)\s+(?:xem|see)\s+(?:tất\s*cả\s+)?(?:các\s+)?(?:thiết\s*bị|device|devices?)(?:\s+(?:ở|tại|in)\s+(.+?))?$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'list_devices',
+                'confidence': 0.96,
+                'description': 'Show me all devices'
+            },
+            {
+                'regex': re.compile(r'^(?:show|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?\s+(?:in|at|ở|tại)\s+(?:the\s+)?(.+?)$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'list_devices_in_room',
+                'confidence': 0.96,
+                'description': 'Show all devices in specific room'
+            },
+            {
+                'regex': re.compile(r'^(?:show|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'list_all_devices',
+                'confidence': 0.97,
+                'description': 'List all devices in house'
+            },
+            {
+                'regex': re.compile(r'^(.+?)\s+(?:có\s+)?(?:đang|is|are)\s+(?:bật|tắt|on|off)(?:\s+(?:không|\?))?$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'check_device_state',
+                'confidence': 0.92,
+                'description': 'Check if device is on/off'
             },
         ])
         
-        # 17. Timer/Schedule - Vietnamese & English
+        # Room-specific device queries
         patterns.extend([
             {
-                'regex': re.compile(r'^(?:đặt|set)\s+(?:hẹn\s*giờ|timer|schedule)\s+(.+?)\s+(?:sau|in|after)\s+(\d+)\s*(giây|phút|giờ|second|minute|hour)s?', re.IGNORECASE),
-                'intent': 'device_control',
-                'action': 'set_timer',
-                'confidence': 0.85,
-                'description': 'Set timer/schedule'
+                'regex': re.compile(r'^(?:thiết\s*bị|device|devices?)\s+(?:ở|tại|in|at)\s+(.+?)$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'devices_in_room',
+                'confidence': 0.93,
+                'description': 'Show devices in specific room'
+            },
+            {
+                'regex': re.compile(r'^(?:có\s+)?(?:những\s+)?(?:thiết\s*bị|device|devices?)\s+(?:gì|nào|what)\s+(?:ở|tại|in)\s+(.+?)$', re.IGNORECASE),
+                'intent': IntentClass.SHOW_DEVICE_STATUS,
+                'action': 'what_devices_in_room',
+                'confidence': 0.94,
+                'description': 'What devices in room'
+            },
+        ])
+        
+        # ==========================================
+        # 3. PLANNING PATTERNS
+        # Routing: Manager → Plan Agent → Tool Agent → Manager
+        # ==========================================
+        
+        # Automation/Plan creation - Vietnamese & English
+        patterns.extend([
+            {
+                'regex': re.compile(r'^(?:tạo|create|thiết\s*lập|setup|make)\s+(?:kế\s*hoạch|plan|automation|tự\s*động\s*hóa|routine)\s*(.*)$', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'create_plan',
+                'confidence': 0.96,
+                'description': 'Create automation plan'
+            },
+            {
+                'regex': re.compile(r'(?:tạo|create|make)\s+(?:kế\s*hoạch|plan)(?:\s+|$)', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'create_plan',
+                'confidence': 0.95,
+                'description': 'Create plan anywhere in sentence'
+            },
+            {
+                'regex': re.compile(r'^(?:lên\s*lịch|schedule|đặt\s*lịch)\s+(.+?)\s+(?:lúc|at|vào)\s+(.+?)$', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'schedule_automation',
+                'confidence': 0.93,
+                'description': 'Schedule automation'
+            },
+            {
+                'regex': re.compile(r'^(?:khi|when|nếu|if)\s+(.+?)\s+(?:thì|then)\s+(.+?)$', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'conditional_automation',
+                'confidence': 0.91,
+                'description': 'Conditional automation (if-then)'
+            },
+            {
+                'regex': re.compile(r'(?:have|có)\s+\d+\s+(?:person|people|người)', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'person_based_automation',
+                'confidence': 0.92,
+                'description': 'Person-count based automation'
+            },
+        ])
+        
+        # Plan management
+        patterns.extend([
+            {
+                'regex': re.compile(r'^(?:plan|option|kế\s*hoạch|lựa\s*chọn)\s*(\d+)$', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'select_plan',
+                'confidence': 0.95,
+                'description': 'Select plan option'
+            },
+            {
+                'regex': re.compile(r'^(?:chọn|select|choose|lấy)\s+(?:plan|kế\s*hoạch|option)\s*(\d+)$', re.IGNORECASE),
+                'intent': IntentClass.PLANNING,
+                'action': 'select_plan_explicit',
+                'confidence': 0.97,
+                'description': 'Explicit plan selection'
             },
         ])
         
         return patterns
     
-    def classify(self, query: str, token: str = "") -> Optional[Dict]:
+    
+    def classify(self, query: str, token: str = "") -> Optional[ClassificationResult]:
         """
-        Fast classification of device control intent.
+        Fast classification của user input theo 4 intent classes.
         
         Args:
             query: User input query
-            token: Authentication token for device validation
+            token: Authentication token
             
         Returns:
-            Dict with classification result or None if no match
-            {
-                'intent': 'device_control' | 'scene_control',
-                'action': specific action type,
-                'confidence': 0.85-0.96,
-                'fast_path': True,
-                'agent': 'tool',
-                'matched_pattern': pattern description,
-                'extracted_params': {...}
-            }
+            ClassificationResult hoặc None nếu không match
+            
+        Intent Classes và Execution Paths:
+        1. device_control → TOOL_THEN_MANAGER
+           - Tool Agent thực thi trước
+           - Manager phân tích kết quả và trả về user (<1s)
+           
+        2. show_device_status → MANAGER_ONLY
+           - Manager dùng get_device_list để lấy thông tin
+           - Phân tích và hiển thị thông tin cơ bản cho user (<1s)
+           - Không gọi Tool Agent
+           
+        3. planning → FULL_PLANNING
+           - Manager phân tích → Plan Agent tạo plans
+           - User chọn plan → Tool Agent thực thi
+           - Manager phân tích kết quả cuối cùng (<1s cho Manager analysis)
+           
+        4. unknown → MANAGER_ONLY
+           - Manager trả lời trực tiếp (<1s)
+           - Không delegate cho Agent nào khác
         """
         if not query or not isinstance(query, str):
             return None
@@ -314,99 +336,322 @@ class FastPathClassifier:
             return None
         
         if self.verbose:
-            logger.info(f"🚀 Fast-path: Analyzing '{query}'")
+            logger.info(f"� Fast-path: Analyzing '{query}'")
         
-        # Try each pattern
+        # Try pattern matching first
         for pattern_def in self.patterns:
             match = pattern_def['regex'].match(query)
             if match:
                 # Extract parameters from regex groups
                 params = self._extract_params(match, pattern_def)
                 
-                # Build result
-                result = {
-                    'intent': pattern_def['intent'],
-                    'action': pattern_def['action'],
-                    'confidence': pattern_def['confidence'],
-                    'fast_path': True,
-                    'agent': 'tool' if pattern_def['intent'] == 'device_control' else 'plan',
-                    'matched_pattern': pattern_def['description'],
-                    'extracted_params': params,
-                    'original_query': query
-                }
+                # Determine execution path based on intent
+                intent = pattern_def['intent']
+                execution_path = self._get_execution_path(intent)
+                
+                # Build classification result
+                result = ClassificationResult(
+                    intent=intent,
+                    confidence=pattern_def['confidence'],
+                    execution_path=execution_path,
+                    method='pattern',
+                    extracted_params=params,
+                    reasoning=f"Pattern match: {pattern_def['description']}"
+                )
                 
                 if self.verbose:
                     logger.info(f"✅ Fast-path match: {pattern_def['description']}")
+                    logger.info(f"   Intent: {intent.value}")
+                    logger.info(f"   Execution Path: {execution_path.value}")
                     logger.info(f"   Confidence: {pattern_def['confidence']:.2f}")
-                    logger.info(f"   Agent: {result['agent']}")
                     logger.info(f"   Params: {params}")
                 
                 return result
         
+        # No pattern match - classify as unknown with low confidence
         if self.verbose:
-            logger.info(f"⚠️ Fast-path: No pattern match for '{query}'")
+            logger.info(f"⚠️ Fast-path: No pattern match for '{query}' → unknown")
         
-        return None
+        # Return unknown classification
+        return ClassificationResult(
+            intent=IntentClass.UNKNOWN,
+            confidence=0.5,
+            execution_path=ExecutionPath.MANAGER_ONLY,
+            method='fallback',
+            extracted_params={},
+            reasoning="No pattern match - classified as unknown"
+        )
+    
+    def _get_execution_path(self, intent: IntentClass) -> ExecutionPath:
+        """
+        Determine execution path based on intent class
+        
+        Mapping:
+        - DEVICE_CONTROL → TOOL_THEN_MANAGER
+        - SHOW_DEVICE_STATUS → MANAGER_ONLY
+        - PLANNING → FULL_PLANNING
+        - UNKNOWN → MANAGER_ONLY
+        """
+        path_mapping = {
+            IntentClass.DEVICE_CONTROL: ExecutionPath.TOOL_THEN_MANAGER,
+            IntentClass.SHOW_DEVICE_STATUS: ExecutionPath.MANAGER_ONLY,
+            IntentClass.PLANNING: ExecutionPath.FULL_PLANNING,
+            IntentClass.UNKNOWN: ExecutionPath.MANAGER_ONLY
+        }
+        return path_mapping.get(intent, ExecutionPath.MANAGER_ONLY)
     
     def _extract_params(self, match: re.Match, pattern_def: Dict) -> Dict:
         """Extract parameters from regex match groups"""
         params = {}
         groups = match.groups()
         
+        intent = pattern_def['intent']
         action = pattern_def['action']
         
-        # Common extractions based on action type
-        if action in ['turn_on', 'turn_off', 'turn_on_off', 'switch']:
-            if len(groups) >= 2:
-                params['device_name'] = groups[1].strip() if groups[1] else None
-                params['room'] = groups[2].strip() if len(groups) > 2 and groups[2] else None
+        # Extract based on intent type
+        if intent == IntentClass.DEVICE_CONTROL:
+            # Device control parameters
+            if action in ['turn_on', 'turn_off', 'turn_on_off', 'switch']:
+                if len(groups) >= 2:
+                    params['device_name'] = groups[1].strip() if len(groups) > 1 and groups[1] else None
+                    params['room'] = groups[2].strip() if len(groups) > 2 and groups[2] else None
+                    params['action_type'] = groups[0].strip() if groups[0] else action
+            
+            elif action in ['set_temperature', 'turn_on_ac_temp']:
+                if len(groups) >= 1:
+                    params['room'] = groups[0].strip() if groups[0] else None
+                    # Find temperature in groups
+                    for g in groups:
+                        if g and g.isdigit():
+                            params['temperature'] = int(g)
+                            break
+            
+            elif action == 'set_brightness':
+                if len(groups) >= 1:
+                    params['device_name'] = groups[0].strip() if groups[0] else None
+                    for g in groups:
+                        if g and g.isdigit():
+                            params['brightness'] = int(g)
+                            break
+            
+            elif action == 'multi_device':
+                if len(groups) >= 3:
+                    params['action_type'] = groups[0].strip() if groups[0] else None
+                    params['device_1'] = groups[1].strip() if groups[1] else None
+                    params['device_2'] = groups[2].strip() if groups[2] else None
+                    params['room'] = groups[3].strip() if len(groups) > 3 and groups[3] else None
         
-        elif action in ['set_temperature', 'turn_on_ac_temp']:
-            if len(groups) >= 2:
-                params['room'] = groups[0].strip() if groups[0] else None
-                # Find temperature in groups
-                for g in groups:
-                    if g and g.isdigit():
-                        params['temperature'] = int(g)
-                        break
+        elif intent == IntentClass.SHOW_DEVICE_STATUS:
+            # Device status query parameters
+            if action in ['get_status', 'check_device_state']:
+                if len(groups) >= 1:
+                    params['device_name'] = groups[0].strip() if groups[0] else None
+                    params['room'] = groups[1].strip() if len(groups) > 1 and groups[1] else None
+            
+            elif action in ['list_devices', 'list_all_devices', 'list_devices_in_room', 'devices_in_room', 'what_devices_in_room']:
+                if len(groups) >= 1 and groups[0]:
+                    # Strip punctuation and whitespace from room name
+                    room = groups[0].strip().rstrip('.,!?;:')
+                    params['room'] = room.lower()
+                else:
+                    params['room'] = 'all'
+                params['show_all'] = (action in ['list_all_devices'])
         
-        elif action == 'set_brightness':
-            if len(groups) >= 2:
-                params['device_name'] = groups[0].strip() if groups[0] else None
-                for g in groups:
-                    if g and g.isdigit():
-                        params['brightness'] = int(g)
-                        break
+        elif intent == IntentClass.PLANNING:
+            # Planning parameters
+            if action == 'create_plan':
+                if len(groups) >= 1:
+                    params['plan_description'] = groups[0].strip() if groups[0] else None
+            
+            elif action == 'schedule_automation':
+                if len(groups) >= 2:
+                    params['task'] = groups[0].strip() if groups[0] else None
+                    params['time'] = groups[1].strip() if groups[1] else None
+            
+            elif action == 'conditional_automation':
+                if len(groups) >= 2:
+                    params['condition'] = groups[0].strip() if groups[0] else None
+                    params['action_when_true'] = groups[1].strip() if groups[1] else None
+            
+            elif action in ['select_plan', 'select_plan_explicit']:
+                if len(groups) >= 1 and groups[0]:
+                    try:
+                        params['plan_id'] = int(groups[0].strip())
+                    except ValueError:
+                        params['plan_id'] = 1  # Default to plan 1
         
-        elif action == 'numbered_device':
-            if len(groups) >= 3:
-                params['action_type'] = groups[0].strip() if groups[0] else None
-                params['device_name'] = groups[1].strip() if groups[1] else None
-                params['device_number'] = groups[2].strip() if groups[2] else None
-                params['room'] = groups[3].strip() if len(groups) > 3 and groups[3] else None
-        
-        elif action in ['all_lights', 'all_devices', 'device_type']:
-            if len(groups) >= 1:
-                params['action_type'] = groups[0].strip() if groups[0] else None
-                params['device_type'] = groups[1].strip() if len(groups) > 1 and groups[1] else None
-                params['room'] = groups[2].strip() if len(groups) > 2 and groups[2] else None
-        
-        elif action == 'multi_device':
-            if len(groups) >= 3:
-                params['action_type'] = groups[0].strip() if groups[0] else None
-                params['device_1'] = groups[1].strip() if groups[1] else None
-                params['device_2'] = groups[2].strip() if groups[2] else None
-                params['room'] = groups[3].strip() if len(groups) > 3 and groups[3] else None
-        
-        # Default: store all groups
+        # Store raw groups for debugging
         params['_raw_groups'] = [g for g in groups if g]
         
         return params
     
-    def should_use_fast_path(self, confidence_threshold: float = 0.90) -> bool:
+    def _detect_language(self, text: str) -> str:
+        """
+        Detect language of input text (Vietnamese or English)
+        
+        Args:
+            text: Input text to detect
+            
+        Returns:
+            'vi' for Vietnamese, 'en' for English
+        """
+        # Vietnamese-specific characters
+        vietnamese_chars = 'àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ'
+        
+        # Check for Vietnamese characters
+        text_lower = text.lower()
+        for char in vietnamese_chars:
+            if char in text_lower:
+                return 'vi'
+        
+        # Check for common Vietnamese words
+        vietnamese_words = ['thiết bị', 'phòng', 'nhà', 'tất cả', 'hiển thị', 'cho tôi', 'xem']
+        for word in vietnamese_words:
+            if word in text_lower:
+                return 'vi'
+        
+        # Default to English
+        return 'en'
+    
+    def format_device_status_response(self, device_list: Dict[str, Any], 
+                                     query_params: Dict[str, Any], 
+                                     user_query: str = '') -> str:
+        """
+        Format device status response cho Manager
+        Chỉ hiển thị thông tin cơ bản (không có thông tin kỹ thuật)
+        Response language matches user query language
+        
+        Args:
+            device_list: Kết quả từ get_device_list tool
+            query_params: Parameters từ classification
+            user_query: Original user query for language detection
+            
+        Returns:
+            Formatted response string với thông tin cơ bản
+        """
+        try:
+            target_room = query_params.get('room', 'all')
+            show_all = query_params.get('show_all', False)
+            
+            # Detect language from user query
+            lang = self._detect_language(user_query) if user_query else 'vi'
+            
+            # Language-specific messages
+            messages = {
+                'vi': {
+                    'title': '🏠 **Danh sách thiết bị**',
+                    'error_no_data': '❌ Không thể lấy thông tin thiết bị. Vui lòng thử lại.',
+                    'no_devices': '📭 Không tìm thấy thiết bị nào trong hệ thống.',
+                    'room_not_found': '❌ Không tìm thấy phòng \'{}\' trong hệ thống.',
+                    'devices': 'Thiết bị',
+                    'buttons': 'Nút điều khiển',
+                    'total': 'Tổng cộng',
+                    'device_unit': 'thiết bị',
+                    'button_unit': 'nút điều khiển'
+                },
+                'en': {
+                    'title': '🏠 **Device List**',
+                    'error_no_data': '❌ Unable to retrieve device information. Please try again.',
+                    'no_devices': '📭 No devices found in the system.',
+                    'room_not_found': '❌ Room \'{}\' not found in the system.',
+                    'devices': 'Devices',
+                    'buttons': 'Control Buttons',
+                    'total': 'Total',
+                    'device_unit': 'device' if target_room != 'all' else 'devices',
+                    'button_unit': 'button' if target_room != 'all' else 'buttons'
+                }
+            }
+            
+            msg = messages[lang]
+            
+            if not device_list or not isinstance(device_list, dict):
+                return msg['error_no_data']
+            
+            # Extract device data
+            data = device_list.get('data', {})
+            rooms = data.get('rooms', [])
+            
+            if not rooms:
+                return msg['no_devices']
+            
+            # Filter rooms if specific room requested
+            if target_room and target_room != 'all':
+                target_room_lower = target_room.lower()
+                logger.info(f"🔍 Filtering for room: '{target_room}' (lowercase: '{target_room_lower}')")
+                logger.info(f"🔍 Available rooms: {[r.get('room_name') for r in rooms]}")
+                rooms = [r for r in rooms if target_room_lower in r.get('room_name', '').lower()]
+                logger.info(f"🔍 Filtered rooms: {[r.get('room_name') for r in rooms]}")
+                
+                if not rooms:
+                    return msg['room_not_found'].format(target_room)
+            
+            # Build response
+            response_lines = []
+            response_lines.append(msg['title'] + "\n")
+            
+            total_devices = 0
+            total_buttons = 0
+            
+            for room in rooms:
+                room_name = room.get('room_name', 'Unknown Room')
+                devices = room.get('devices', [])
+                buttons = room.get('buttons', [])
+                
+                if not devices and not buttons:
+                    continue
+                
+                # Count items
+                device_count = len(devices)
+                button_count = len(buttons)
+                total_devices += device_count
+                total_buttons += button_count
+                
+                response_lines.append(f"\n📍 **{room_name}**")
+                
+                # Show devices
+                if devices:
+                    response_lines.append(f"  🔌 **{msg['devices']}** ({device_count}):")
+                    for device in devices:
+                        device_name = device.get('name', 'Unknown Device')
+                        device_status = device.get('device_status', 'Unknown')
+                        status_icon = '🟢' if 'kết nối' in device_status.lower() or 'connected' in device_status.lower() else '⚪'
+                        response_lines.append(f"    • **{device_name}** - {status_icon} {device_status}")
+                
+                # Show buttons
+                if buttons:
+                    response_lines.append(f"  🎚️ **{msg['buttons']}** ({button_count}):")
+                    for btn in buttons:
+                        btn_name = btn.get('name', 'Unknown Button')
+                        btn_status = btn.get('status', 'Unknown')
+                        status_icon = '🟢' if btn_status.lower() in ['bật', 'on'] else '⚪'
+                        response_lines.append(f"    • **{btn_name}** - {status_icon} {btn_status}")
+            
+            if total_devices == 0 and total_buttons == 0:
+                return msg['no_devices']
+            
+            # Build summary with proper singular/plural handling
+            if lang == 'en':
+                device_word = 'device' if total_devices == 1 else 'devices'
+                button_word = 'button' if total_buttons == 1 else 'buttons'
+                response_lines.append(f"\n📊 **{msg['total']}**: {total_devices} {device_word}, {total_buttons} {button_word}")
+            else:
+                response_lines.append(f"\n📊 **{msg['total']}**: {total_devices} {msg['device_unit']}, {total_buttons} {msg['button_unit']}")
+            
+            return '\n'.join(response_lines)
+            
+        except Exception as e:
+            logger.error(f"❌ Error formatting device status: {str(e)}")
+            return f"❌ Lỗi khi hiển thị thông tin thiết bị: {str(e)}"
+    
+    def should_use_fast_path(self, confidence_threshold: float = 0.85) -> bool:
         """
         Determine if fast-path should be used based on confidence threshold.
-        Default threshold: 0.90 (90% confidence)
+        
+        Args:
+            confidence_threshold: Minimum confidence to use fast-path (default: 0.85)
+            
+        Returns:
+            True if should use fast-path
         """
         return True  # Can be made configurable based on system state
 

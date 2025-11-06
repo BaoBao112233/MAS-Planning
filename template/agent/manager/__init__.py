@@ -6,6 +6,7 @@ It analyzes user queries, makes routing decisions, and coordinates interactions 
 specialized agents (Plan Agent, Meta Agent, Tool Agent).
 """
 
+import json
 from template.agent import BaseAgent
 from template.configs.environments import env
 from template.agent.manager.state import ManagerState
@@ -28,6 +29,7 @@ from langgraph.graph import StateGraph, END, START
 from termcolor import colored
 import logging
 import time
+import json
 from typing import Dict, Any, Optional
 
 # Configure logging
@@ -195,27 +197,35 @@ class ManagerAgent(BaseAgent):
         # ========================================
         if self.use_fast_path:
             fast_result = self.fast_path.classify(user_input, token)
-            if fast_result and fast_result['confidence'] >= self.fast_path_threshold:
+            if fast_result and fast_result.confidence >= self.fast_path_threshold:
                 if self.verbose:
                     logger.info(colored(f"⚡ FAST-PATH ACTIVATED", "green", attrs=["bold"]))
-                    logger.info(colored(f"   Pattern: {fast_result['matched_pattern']}", "green"))
-                    logger.info(colored(f"   Confidence: {fast_result['confidence']:.2f}", "green"))
-                    logger.info(colored(f"   Routing to: {fast_result['agent']} agent", "green"))
+                    logger.info(colored(f"   Intent: {fast_result.intent.value}", "green"))
+                    logger.info(colored(f"   Execution Path: {fast_result.execution_path.value}", "green"))
+                    logger.info(colored(f"   Confidence: {fast_result.confidence:.2f}", "green"))
                     logger.info(colored(f"   Skipped: Manager LLM call (~2-3s saved)", "yellow", attrs=["bold"]))
+                
+                # Map execution path to agent_type for backward compatibility
+                agent_type_map = {
+                    'tool_then_manager': 'tool',
+                    'manager_only': 'direct',
+                    'full_planning': 'plan'
+                }
+                agent_type = agent_type_map.get(fast_result.execution_path.value, 'direct')
                 
                 # Build fast-path state
                 return {
                     **state,
-                    'agent_type': fast_result['agent'],
-                    'query_type': fast_result['intent'],
-                    'confidence_score': fast_result['confidence'],
+                    'agent_type': agent_type,
+                    'query_type': fast_result.intent.value,
+                    'confidence_score': fast_result.confidence,
                     'fast_path_used': True,
                     'fast_path_result': fast_result,
                     'reasoning_result': {
-                        'reasoning': f"Fast-path match: {fast_result['matched_pattern']}",
-                        'agent_type': fast_result['agent'],
-                        'confidence': fast_result['confidence'],
-                        'explanation': f"Pattern-based classification with {fast_result['confidence']:.1%} confidence"
+                        'reasoning': fast_result.reasoning,
+                        'agent_type': agent_type,
+                        'confidence': fast_result.confidence,
+                        'explanation': f"Fast-path: {fast_result.intent.value} → {fast_result.execution_path.value}"
                     }
                 }
         
@@ -366,6 +376,15 @@ class ManagerAgent(BaseAgent):
         agent_type = state.get('agent_type', 'direct')
         user_input = state.get('input', '')
         
+        if self.verbose:
+            logger.info(f"📍 route_to_agent state keys: {list(state.keys())}")
+            logger.info(f"📍 fast_path_result in state: {'fast_path_result' in state}")
+            if 'fast_path_result' in state:
+                fpr = state['fast_path_result']
+                logger.info(f"📍 fast_path_result type: {type(fpr)}")
+                if fpr:
+                    logger.info(f"📍 fast_path_result has extracted_params: {hasattr(fpr, 'extracted_params')}")
+        
         # Validate and normalize agent type (only support: direct, plan, tool)
         valid_agents = ['direct', 'plan', 'tool']
         if agent_type not in valid_agents:
@@ -383,16 +402,89 @@ class ManagerAgent(BaseAgent):
             logger.info(f"🚀 Routing to {agent_type} agent")
         
         try:
+            delegation_result = None  # Initialize to avoid UnboundLocalError
+            
             if agent_type == 'direct':
-                # Handle direct responses
-                reasoning_result = state.get('reasoning_result', {})
-                direct_answer = reasoning_result.get('direct_answer')
+                # Check if this is show_device_status intent
+                query_type = state.get('query_type', 'general')
+                fast_path_result = state.get('fast_path_result')
                 
-                if not direct_answer:
-                    # Provide default helpful response based on query type
-                    query_type = state.get('query_type', 'general')
-                    if query_type == 'information':
-                        direct_answer = """🏠 **Smart Home Information**
+                if query_type == 'show_device_status' or (fast_path_result and hasattr(fast_path_result, 'intent') and fast_path_result.intent.value == 'show_device_status'):
+                    # Special handling for show_device_status
+                    # Manager calls get_device_list directly
+                    if self.verbose:
+                        logger.info(colored("📋 Show Device Status - Manager calling get_device_list", "cyan", attrs=["bold"]))
+                    
+                    token = state.get('token', '')
+                    device_list = self._get_device_list(token)
+                    
+                    if self.verbose:
+                        logger.info(f"📊 Device list type: {type(device_list)}")
+                        if device_list:
+                            if isinstance(device_list, dict):
+                                logger.info(f"📊 Device list keys: {device_list.keys()}")
+                            elif isinstance(device_list, list):
+                                logger.info(f"📊 Device list length: {len(device_list)}")
+                                if len(device_list) > 0:
+                                    logger.info(f"📊 First item type: {type(device_list[0])}")
+                                    logger.info(f"📊 First item: {device_list[0]}")
+                            else:
+                                logger.info(f"📊 Device list value: {device_list}")
+                    
+                    if device_list:
+                        # Wrap list in expected dict structure for formatter
+                        if isinstance(device_list, list):
+                            device_data = {'data': {'rooms': device_list}}
+                        else:
+                            device_data = device_list
+                        
+                        if self.verbose:
+                            logger.info(f"📦 Device data for formatter: {type(device_data)}")
+                        
+                        # Get params from fast_path_result
+                        if fast_path_result and hasattr(fast_path_result, 'extracted_params'):
+                            params = fast_path_result.extracted_params
+                            if self.verbose:
+                                logger.info(f"🎯 Using fast_path params: {params}")
+                        else:
+                            params = {'room': 'all', 'show_all': True}
+                            if self.verbose:
+                                logger.info(f"⚠️ No fast_path params, using default: {params}")
+                                if fast_path_result:
+                                    logger.info(f"⚠️ fast_path_result exists but no extracted_params attr")
+                                    logger.info(f"⚠️ fast_path_result type: {type(fast_path_result)}")
+                                    logger.info(f"⚠️ fast_path_result attrs: {dir(fast_path_result)}")
+                        
+                        # Format response using fast_path classifier with user query for language detection
+                        user_query = state.get('input', '')
+                        formatted_response = self.fast_path.format_device_status_response(device_data, params, user_query)
+                        
+                        if self.verbose:
+                            logger.info(f"✅ Formatted response length: {len(formatted_response)}")
+                            logger.info(f"✅ Formatted response preview: {formatted_response[:200]}...")
+                        
+                        delegation_result = {
+                            'output': formatted_response,
+                            'agent_type': 'direct',
+                            'success': True,
+                            'device_list': device_list
+                        }
+                    else:
+                        delegation_result = {
+                            'output': '❌ Không thể lấy thông tin thiết bị. Vui lòng thử lại.',
+                            'agent_type': 'direct',
+                            'success': False,
+                            'error': 'Failed to get device list'
+                        }
+                else:
+                    # Handle other direct responses
+                    reasoning_result = state.get('reasoning_result', {})
+                    direct_answer = reasoning_result.get('direct_answer')
+                    
+                    if not direct_answer:
+                        # Provide default helpful response based on query type
+                        if query_type == 'information':
+                            direct_answer = """🏠 **Smart Home Information**
 
 A smart home is a residence equipped with internet-connected devices that enable remote monitoring and management of appliances and systems, such as lighting, heating, security, and entertainment systems.
 
@@ -408,8 +500,8 @@ A smart home is a residence equipped with internet-connected devices that enable
 • Provide guidance on smart home setup and optimization
 
 What would you like to know more about?"""
-                    else:
-                        direct_answer = """🤖 **Smart Home Assistant**
+                        else:
+                            direct_answer = """🤖 **Smart Home Assistant**
 
 I'm your Multi-Agent Smart Home Assistant! I can help you with:
 
@@ -425,13 +517,13 @@ I'm your Multi-Agent Smart Home Assistant! I can help you with:
 • "What's the best way to automate my home?"
 
 How can I assist you today?"""
-                
-                delegation_result = {
-                    'output': direct_answer,
-                    'direct_answer': direct_answer,  # Add this for format_final_response
-                    'agent_type': 'direct',
-                    'success': True
-                }
+                    
+                    delegation_result = {
+                        'output': direct_answer,
+                        'direct_answer': direct_answer,  # Add this for format_final_response
+                        'agent_type': 'direct',
+                        'success': True
+                    }
                 
             elif agent_type == 'plan':
                 # Load cached plan options from context if available
@@ -752,6 +844,96 @@ How can I assist you today?"""
                 'success': False,
                 'error': str(e)
             }
+    
+    def _get_device_list(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Call get_device_list tool directly from Manager
+        Similar to PlanAgent's implementation but for Manager
+        
+        Args:
+            token: Authentication token
+            
+        Returns:
+            Device list data or None if failed
+        """
+        try:
+            if self.verbose:
+                logger.info(colored("📡 Manager calling get_device_list tool...", "cyan", attrs=['bold']))
+            
+            # Import MCP client
+            from langchain_mcp_adapters.client import MultiServerMCPClient
+            import asyncio
+            
+            async def async_get_device_list():
+                """Async wrapper to call get_device_list"""
+                mcp_client = None
+                try:
+                    # Initialize temporary MCP client
+                    mcp_client = MultiServerMCPClient(
+                        {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
+                    )
+                    await mcp_client.__aenter__()
+                    
+                    # Get tools
+                    temp_tools = list(mcp_client.get_tools())
+                    temp_tools_dict = {tool.name: tool for tool in temp_tools}
+                    
+                    if 'get_device_list' not in temp_tools_dict:
+                        logger.warning("⚠️ get_device_list tool not available")
+                        return None
+                    
+                    get_device_list_tool = temp_tools_dict['get_device_list']
+                    
+                    # Call tool with timeout
+                    result = await asyncio.wait_for(
+                        get_device_list_tool.ainvoke({"token": token}),
+                        timeout=20.0
+                    )
+                    
+                    if self.verbose:
+                        logger.info(colored(f"✅ get_device_list returned successfully", "green", attrs=['bold']))
+                    
+                    # Parse JSON if result is string
+                    if isinstance(result, str):
+                        try:
+                            result = json.loads(result)
+                            if self.verbose:
+                                logger.info(colored(f"✅ Parsed JSON response", "green"))
+                        except json.JSONDecodeError as e:
+                            logger.error(f"❌ Failed to parse JSON response: {str(e)}")
+                            return None
+                    
+                    return result
+                    
+                except asyncio.TimeoutError:
+                    logger.warning("⚠️ get_device_list timeout after 20 seconds")
+                    return None
+                except Exception as e:
+                    logger.error(f"❌ Error calling get_device_list: {str(e)}")
+                    return None
+                finally:
+                    if mcp_client:
+                        try:
+                            await mcp_client.__aexit__(None, None, None)
+                        except:
+                            pass
+            
+            # Run async function
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in async context, need to run in executor
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(lambda: asyncio.run(async_get_device_list()))
+                    result = future.result(timeout=25)
+                    return result
+            except RuntimeError:
+                # No running loop, can run directly
+                return asyncio.run(async_get_device_list())
+            
+        except Exception as e:
+            logger.error(f"❌ Error in _get_device_list: {str(e)}")
+            return None
     
     def stream(self, input_data: str):
         """
