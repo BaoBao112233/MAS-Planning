@@ -193,14 +193,14 @@ class FastPathClassifier:
                 'description': 'Show me all devices'
             },
             {
-                'regex': re.compile(r'^(?:show|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?\s+(?:in|at|ở|tại)\s+(?:the\s+)?(.+?)$', re.IGNORECASE),
+                'regex': re.compile(r'^(?:show|display|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?\s+(?:in|at|ở|tại)\s+(?:the\s+)?(.+?)$', re.IGNORECASE),
                 'intent': IntentClass.SHOW_DEVICE_STATUS,
                 'action': 'list_devices_in_room',
                 'confidence': 0.96,
                 'description': 'Show all devices in specific room'
             },
             {
-                'regex': re.compile(r'^(?:show|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?$', re.IGNORECASE),
+                'regex': re.compile(r'^(?:show|display|list|hiển\s*thị)\s+(?:me\s+)?(?:all\s+)?(?:device|devices|thiết\s*bị)s?$', re.IGNORECASE),
                 'intent': IntentClass.SHOW_DEVICE_STATUS,
                 'action': 'list_all_devices',
                 'confidence': 0.97,
@@ -485,6 +485,60 @@ class FastPathClassifier:
         
         return params
     
+    def _normalize_room_name(self, room_name: str) -> str:
+        """
+        Normalize room name for flexible matching.
+        Handles case-insensitive matching and common variants.
+        
+        Args:
+            room_name: Room name to normalize
+            
+        Returns:
+            Normalized room name (lowercase, no extra spaces)
+            
+        Examples:
+            "Bedroom" → "bedroom"
+            "Bed room" → "bedroom"
+            "Living room" → "livingroom"
+            "Living Room" → "livingroom"
+            "phòng ngủ" → "phòng ngủ"
+        """
+        if not room_name:
+            return ""
+        
+        # Convert to lowercase and strip
+        normalized = room_name.lower().strip()
+        
+        # Remove spaces for common English room names
+        # This allows "Bed room", "bedroom", "Bedroom" to all match
+        normalized = normalized.replace(" ", "")
+        
+        return normalized
+    
+    def _match_room_name(self, user_room: str, system_room: str) -> bool:
+        """
+        Match user-provided room name against system room name.
+        Handles variants like "bedroom", "Bedroom", "Bed room", etc.
+        
+        Args:
+            user_room: Room name from user query
+            system_room: Room name from system/API
+            
+        Returns:
+            True if rooms match
+        """
+        if not user_room or not system_room:
+            return False
+        
+        # Normalize both room names
+        normalized_user = self._normalize_room_name(user_room)
+        normalized_system = self._normalize_room_name(system_room)
+        
+        # Check for exact match or partial match
+        return (normalized_user == normalized_system or 
+                normalized_user in normalized_system or 
+                normalized_system in normalized_user)
+    
     def _detect_language(self, text: str) -> str:
         """
         Detect language of input text (Vietnamese or English)
@@ -576,10 +630,18 @@ class FastPathClassifier:
             
             # Filter rooms if specific room requested
             if target_room and target_room != 'all':
-                target_room_lower = target_room.lower()
-                logger.info(f"🔍 Filtering for room: '{target_room}' (lowercase: '{target_room_lower}')")
+                logger.info(f"🔍 Filtering for room: '{target_room}'")
                 logger.info(f"🔍 Available rooms: {[r.get('room_name') for r in rooms]}")
-                rooms = [r for r in rooms if target_room_lower in r.get('room_name', '').lower()]
+                
+                # Use flexible room name matching
+                matched_rooms = []
+                for room in rooms:
+                    room_name = room.get('room_name', '')
+                    if self._match_room_name(target_room, room_name):
+                        matched_rooms.append(room)
+                        logger.info(f"✅ Matched: '{target_room}' → '{room_name}'")
+                
+                rooms = matched_rooms
                 logger.info(f"🔍 Filtered rooms: {[r.get('room_name') for r in rooms]}")
                 
                 if not rooms:

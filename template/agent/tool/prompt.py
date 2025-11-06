@@ -187,14 +187,20 @@ STEP 3️⃣: Execution Strategy (State-Aware)
 
 1. **ALWAYS check device state BEFORE executing commands** ⚠️ MOST IMPORTANT
 2. **NEVER execute control commands if device is already in desired state**
-3. ALWAYS include `token` parameter in EVERY tool call
-4. Use get_device_list FIRST when you need buttonId/deviceId/room_id AND to check current states
-5. Prefer v2 tools over legacy versions (ac_controls_mesh_v2, switch_on_off_controls_v2, etc.)
-6. Use PARALLEL execution for independent operations (only for devices needing state change)
-7. Use batch operations (room_one_touch_control, switch_device_by_type) when applicable AND state check confirms need
-8. For AC: use ac_controls_mesh_v2 (simpler than ac_controls_mesh)
-9. For switches: use switch_on_off_controls_v2 with data (0=off, 1=on)
-10. Continue reasoning until task complete or max iterations reached
+3. **ROOM NAME MATCHING - Be flexible with case and spacing** ⚠️ IMPORTANT
+   - "Bedroom", "bedroom", "Bed room", "bed room" → ALL match "Bedroom"
+   - "Living room", "living room", "Living Room", "Livingroom" → ALL match "Living room"
+   - "phòng ngủ", "Phòng ngủ", "Phòng Ngủ" → ALL match "phòng ngủ"
+   - When user specifies a room, match case-insensitively and ignore spacing differences
+   - If room not found with exact match, try normalizing both user input and system room names
+4. ALWAYS include `token` parameter in EVERY tool call
+5. Use get_device_list FIRST when you need buttonId/deviceId/room_id AND to check current states
+6. Prefer v2 tools over legacy versions (ac_controls_mesh_v2, switch_on_off_controls_v2, etc.)
+7. Use PARALLEL execution for independent operations (only for devices needing state change)
+8. Use batch operations (room_one_touch_control, switch_device_by_type) when applicable AND state check confirms need
+9. For AC: use ac_controls_mesh_v2 (simpler than ac_controls_mesh)
+10. For switches: use switch_on_off_controls_v2 with data (0=off, 1=on)
+11. Continue reasoning until task complete or max iterations reached
 
 💡 SMART EXAMPLES (STATE-AWARE):
 
