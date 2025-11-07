@@ -91,6 +91,35 @@ class FastPathClassifier:
         patterns = []
         
         # ==========================================
+        # 🔴 HIGHEST PRIORITY: EMPTY ROOM DETECTION
+        # Must check BEFORE any other patterns
+        # Routing: Tool Agent (device control - turn off all)
+        # ==========================================
+        patterns.extend([
+            {
+                'regex': re.compile(r'(?:have\s+)?(?:0|no|zero)\s+(?:person|people|one)(?:\s+(?:in|at))?\s+(?:the\s+)?(.+?)(?:\.|$|\s+create|\s+turn)', re.IGNORECASE),
+                'intent': IntentClass.DEVICE_CONTROL,
+                'action': 'empty_room_turn_off_all',
+                'confidence': 0.98,  # Very high confidence
+                'description': 'Empty room detection - turn off all devices'
+            },
+            {
+                'regex': re.compile(r'(?:nobody|no\s*one|empty)\s+(?:in|at)\s+(?:the\s+)?(.+?)(?:\.|$|\s+create|\s+turn)', re.IGNORECASE),
+                'intent': IntentClass.DEVICE_CONTROL,
+                'action': 'empty_room_turn_off_all',
+                'confidence': 0.98,
+                'description': 'Empty room detection - nobody/no one variant'
+            },
+            {
+                'regex': re.compile(r'(?:không\s*có\s*ai|0\s*người)\s+(?:trong|ở)\s+(.+?)(?:\.|$)', re.IGNORECASE),
+                'intent': IntentClass.DEVICE_CONTROL,
+                'action': 'empty_room_turn_off_all',
+                'confidence': 0.98,
+                'description': 'Empty room detection - Vietnamese'
+            }
+        ])
+        
+        # ==========================================
         # 1. DEVICE CONTROL PATTERNS
         # Routing: Tool Agent → Manager (fast execution)
         # ==========================================
@@ -110,7 +139,7 @@ class FastPathClassifier:
                 'action': 'turn_off',
                 'confidence': 0.95,
                 'description': 'Turn off device'
-            },
+            }
         ])
         
         # Temperature/AC control
@@ -411,7 +440,22 @@ class FastPathClassifier:
         # Extract based on intent type
         if intent == IntentClass.DEVICE_CONTROL:
             # Device control parameters
-            if action in ['turn_on', 'turn_off', 'turn_on_off', 'switch']:
+            if action == 'empty_room_turn_off_all':
+                # Empty room detection - extract room name
+                if len(groups) >= 1 and groups[0]:
+                    # Clean room name (remove trailing punctuation, "create plan", etc.)
+                    room = groups[0].strip().rstrip('.,!?;:')
+                    # Remove common trailing phrases
+                    room = re.sub(r'\s+(create|turn|make).*$', '', room, flags=re.IGNORECASE).strip()
+                    params['room'] = room
+                    params['action_type'] = 'turn_off_all_devices'
+                    params['reason'] = 'empty_room'
+                else:
+                    params['room'] = 'all'  # Default to entire house
+                    params['action_type'] = 'turn_off_all_devices'
+                    params['reason'] = 'empty_house'
+            
+            elif action in ['turn_on', 'turn_off', 'turn_on_off', 'switch']:
                 if len(groups) >= 2:
                     params['device_name'] = groups[1].strip() if len(groups) > 1 and groups[1] else None
                     params['room'] = groups[2].strip() if len(groups) > 2 and groups[2] else None

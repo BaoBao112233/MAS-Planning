@@ -180,6 +180,45 @@ class ManagerAgent(BaseAgent):
             logger.info("🔧 Tool Agent loaded")
         return self._tool_agent
     
+    def _detect_and_convert_empty_room(self, user_input: str) -> Optional[tuple[str, str]]:
+        """
+        Detect if query indicates empty room and auto-convert to turn off command
+        
+        Returns:
+            tuple[str, str] | None: (converted_command, detected_info) if detected, None otherwise
+        """
+        user_input_lower = user_input.lower()
+        
+        # Keywords for empty room detection
+        empty_keywords = [
+            "0 person", "no one", "nobody", "no people", "0 people",
+            "không có ai", "have 0", "no have", "empty room", "empty"
+        ]
+        
+        # Check if query contains empty room keywords
+        has_empty_keyword = any(keyword in user_input_lower for keyword in empty_keywords)
+        
+        if not has_empty_keyword:
+            return None
+        
+        # Detect if specific room mentioned or entire house
+        # Let Tool Agent handle room extraction from actual device list
+        if any(word in user_input_lower for word in ['house', 'home', 'nhà', 'toàn bộ', 'all rooms']):
+            converted_command = "Turn off all devices in the entire house"
+            detected_info = "entire house"
+        else:
+            # Generic conversion - Tool Agent will extract specific room from device list
+            converted_command = f"Turn off all devices - {user_input}"
+            detected_info = "room (to be identified from device list)"
+        
+        if self.verbose:
+            logger.info(colored(f"🔴 EMPTY ROOM DETECTED!", "red", attrs=["bold"]))
+            logger.info(colored(f"   Original: {user_input}", "yellow"))
+            logger.info(colored(f"   Converted: {converted_command}", "green", attrs=["bold"]))
+            logger.info(colored(f"   Scope: {detected_info}", "cyan"))
+        
+        return (converted_command, detected_info)
+    
     def analyze_query(self, state: ManagerState) -> ManagerState:
         """
         Analyze user query and determine routing strategy with conversation context
@@ -190,6 +229,36 @@ class ManagerAgent(BaseAgent):
         
         if self.verbose:
             logger.info(f"🔍 Analyzing query: {user_input}")
+        
+        # ========================================
+        # HIGHEST PRIORITY: EMPTY ROOM DETECTION
+        # Auto-convert empty room queries to turn off commands
+        # ========================================
+        empty_room_result = self._detect_and_convert_empty_room(user_input)
+        if empty_room_result:
+            converted_command, detected_info = empty_room_result
+            
+            # Override user input with converted command
+            state['input'] = converted_command
+            state['original_input'] = user_input  # Keep original for reference
+            state['empty_room_detected'] = True
+            state['detected_scope'] = detected_info
+            
+            # Force routing to tool agent
+            return {
+                **state,
+                'agent_type': 'tool',
+                'query_type': 'device_control',
+                'confidence_score': 1.0,
+                'fast_path_used': True,
+                'empty_room_auto_conversion': True,
+                'reasoning_result': {
+                    'reasoning': f'Empty room detected: {detected_info}. Auto-converting to turn off all devices for energy saving. Tool Agent will identify specific rooms from device list.',
+                    'agent_type': 'tool',
+                    'confidence': 1.0,
+                    'explanation': f'Empty room auto-routing: {user_input} → {converted_command}'
+                }
+            }
         
         # ========================================
         # FAST-PATH OPTIMIZATION
