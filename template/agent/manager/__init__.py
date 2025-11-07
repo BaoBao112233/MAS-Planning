@@ -700,6 +700,7 @@ How can I assist you today?"""
                 # Call ToolAgent ainvoke since invoke raises error in async context
                 import asyncio
                 import concurrent.futures
+                import traceback
                 
                 def call_tool_agent(input_data):
                     return asyncio.run(self.tool_agent.ainvoke(input_data))
@@ -710,9 +711,15 @@ How can I assist you today?"""
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(call_tool_agent, tool_input)
                         delegation_result = future.result()
-                except RuntimeError:
+                except RuntimeError as e:
                     # No running loop, can run directly
-                    delegation_result = call_tool_agent(tool_input)
+                    if "no running event loop" in str(e).lower():
+                        delegation_result = call_tool_agent(tool_input)
+                    else:
+                        # Re-raise other RuntimeErrors
+                        logger.error(f"❌ RuntimeError in Tool Agent execution: {str(e)}")
+                        logger.error(f"Traceback: {traceback.format_exc()}")
+                        raise
                 
             else:
                 # Unknown agent type
@@ -737,7 +744,10 @@ How can I assist you today?"""
             }
             
         except Exception as e:
+            import traceback
             logger.error(f"❌ Error routing to {agent_type} agent: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
             
             delegation_result = {
                 'output': f'I encountered an error while processing your request: {str(e)}',
