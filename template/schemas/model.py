@@ -35,6 +35,7 @@ class ChatRequestAPI(BaseModel):
     sessionId: str = Field(..., description="Unique identifier for the user session")
     token: Optional[str] = Field("", description="Authentication token if required") 
     message: str = Field(..., description="User message to process")
+    voice: Optional[str] = Field("Fritz-PlayAI", description="Voice to use for text-to-speech")
     
 # Response models
 class APIResponse(BaseModel):

@@ -160,6 +160,8 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             max_iteration=env.MAX_ITERATIONS
         )
 
+        voice = request.voice if hasattr(request, 'voice') else "Fritz-PlayAI"
+
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   
         cached_plans = session_cache.get(session_key)
@@ -194,7 +196,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             # Save audio file temporarily
             audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
             temp_audio_path = f"/tmp/{audio_filename}"
-            await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice="Fritz-PlayAI")
+            await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice)
             # audio_content = await text_to_speech(response_text)
             
             
@@ -259,6 +261,7 @@ async def chat_audio(
     sessionId: str,
     conversationId: str,
     token: str,
+    voice: str = "Fritz-PlayAI",
     audio_file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None
 ):
@@ -315,7 +318,7 @@ async def chat_audio(
         # Generate audio file from response text
         audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
         temp_audio_path = f"/tmp/{audio_filename}"
-        await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice="Fritz-PlayAI")
+        await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice)
         # audio_content = await text_to_speech(response_text)
 
         # # Save audio file temporarily
