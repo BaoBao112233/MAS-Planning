@@ -57,6 +57,11 @@ class EnvironmentSettings(BaseSettings):
     LANGFUSE_SECRET_KEY: str
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
     LANGFUSE_PROJECT_NAME: str = "MAS-Planning"
+    # Groq API settings
+    GROQ_API_KEY: str
+    GROQ_MODEL_VOICE_1: str
+    GROQ_MODEL_VOICE_2: str
+    GROQ_MODEL_STT: str
     # Debug settings
     MCP_SERVER_URL: str
     MAX_ITERATIONS: int = 10

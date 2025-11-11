@@ -31,6 +31,7 @@ from template.schemas.model import (
     PlanOption,
     PlanSelectionRequest
 )
+from template.utils.tts import text_to_speech_with_voice, speech_to_text, CLIENT
 
 from gtts import gTTS
 from pydub import AudioSegment
@@ -57,81 +58,81 @@ ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY
 ELEVENLABS_BASE_URL = env.ELEVENLABS_BASE_URL  
 DEFAULT_VOICE_ID = env.ELEVENLABS_VOICE_ID
 
-async def text_to_speech(text: str, path: str):
-    # """Convert text to speech using ElevenLabs API"""
-    # url = f"{env.ELEVENLABS_BASE_URL}/text-to-speech/{env.ELEVENLABS_VOICE_ID}"
-    # headers = {
-    #     "Accept": "audio/mpeg",
-    #     "Content-Type": "application/json",
-    #     "xi-api-key": env.ELEVENLABS_API_KEY
-    # }
-    # data = {
-    #     "text": text,
-    #     "model_id": env.ELEVENLABS_MODEL_ID,
-    #     "voice_settings": {
-    #         "stability": env.ELEVENLABS_STABILITY,
-    #         "similarity_boost": env.ELEVENLABS_SIMILARITY_BOOST
-    #     }
-    # }
+# async def text_to_speech(text: str, path: str):
+#     # """Convert text to speech using ElevenLabs API"""
+#     # url = f"{env.ELEVENLABS_BASE_URL}/text-to-speech/{env.ELEVENLABS_VOICE_ID}"
+#     # headers = {
+#     #     "Accept": "audio/mpeg",
+#     #     "Content-Type": "application/json",
+#     #     "xi-api-key": env.ELEVENLABS_API_KEY
+#     # }
+#     # data = {
+#     #     "text": text,
+#     #     "model_id": env.ELEVENLABS_MODEL_ID,
+#     #     "voice_settings": {
+#     #         "stability": env.ELEVENLABS_STABILITY,
+#     #         "similarity_boost": env.ELEVENLABS_SIMILARITY_BOOST
+#     #     }
+#     # }
     
-    # async with httpx.AsyncClient() as client:
-    #     response = await client.post(url, json=data, headers=headers, timeout=3600000.0)
-    #     if response.status_code != 200:
-    #         raise HTTPException(status_code=response.status_code, detail="Failed to generate speech")
-    #     return response.content
+#     # async with httpx.AsyncClient() as client:
+#     #     response = await client.post(url, json=data, headers=headers, timeout=3600000.0)
+#     #     if response.status_code != 200:
+#     #         raise HTTPException(status_code=response.status_code, detail="Failed to generate speech")
+#     #     return response.content
 
-    tts = gTTS(text=text, lang='en')
-    logger.info(colored("Write MP3 to RAM", "green", attrs=["bold"]))
-    mp3_fp = BytesIO()
-    tts.write_to_fp(mp3_fp)
-    mp3_fp.seek(0)
-    logger.info(colored("Convert MP3 in RAM to standard WAV", "green", attrs=["bold"]))
-    sound = AudioSegment.from_file(mp3_fp, format="mp3")
-    sound = sound.set_channels(1).set_frame_rate(16000)
-    logger.info(colored(f"Export WAV to {path}", "green", attrs=["bold"]))
-    sound.export(path, format="wav")
+#     tts = gTTS(text=text, lang='en')
+#     logger.info(colored("Write MP3 to RAM", "green", attrs=["bold"]))
+#     mp3_fp = BytesIO()
+#     tts.write_to_fp(mp3_fp)
+#     mp3_fp.seek(0)
+#     logger.info(colored("Convert MP3 in RAM to standard WAV", "green", attrs=["bold"]))
+#     sound = AudioSegment.from_file(mp3_fp, format="mp3")
+#     sound = sound.set_channels(1).set_frame_rate(16000)
+#     logger.info(colored(f"Export WAV to {path}", "green", attrs=["bold"]))
+#     sound.export(path, format="wav")
 
-async def speech_to_text(audio_file: UploadFile) -> str:
-    # """Convert speech to text using ElevenLabs API"""
-    # # Save uploaded file temporarily
-    # with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-    #     content = await audio_file.read()
-    #     temp_file.write(content)
-    #     temp_file_path = temp_file.name
+# async def speech_to_text(audio_file: UploadFile) -> str:
+#     # """Convert speech to text using ElevenLabs API"""
+#     # # Save uploaded file temporarily
+#     # with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+#     #     content = await audio_file.read()
+#     #     temp_file.write(content)
+#     #     temp_file_path = temp_file.name
     
-    # try:
-    #     # ElevenLabs Speech-to-Text API
-    #     url = f"{ELEVENLABS_BASE_URL}/speech-to-text"
-    #     headers = {
-    #         "xi-api-key": ELEVENLABS_API_KEY
-    #     }
+#     # try:
+#     #     # ElevenLabs Speech-to-Text API
+#     #     url = f"{ELEVENLABS_BASE_URL}/speech-to-text"
+#     #     headers = {
+#     #         "xi-api-key": ELEVENLABS_API_KEY
+#     #     }
         
-    #     with open(temp_file_path, 'rb') as f:
-    #         files = {"audio": f}
-    #         data = {"model_id": "eleven_multilingual_sts_v2"}
+#     #     with open(temp_file_path, 'rb') as f:
+#     #         files = {"audio": f}
+#     #         data = {"model_id": "eleven_multilingual_sts_v2"}
             
-    #         async with httpx.AsyncClient() as client:
-    #             response = await client.post(url, files=files, data=data, headers=headers, timeout=3600000.0)
-    #             if response.status_code != 200:
-    #                 raise HTTPException(status_code=response.status_code, detail="Failed to convert speech to text")
+#     #         async with httpx.AsyncClient() as client:
+#     #             response = await client.post(url, files=files, data=data, headers=headers, timeout=3600000.0)
+#     #             if response.status_code != 200:
+#     #                 raise HTTPException(status_code=response.status_code, detail="Failed to convert speech to text")
                 
-    #             result = response.json()
-    #             return result.get("text", "")
-    # finally:
-    #     # Clean up temporary file
-    #     os.unlink(temp_file_path)
+#     #             result = response.json()
+#     #             return result.get("text", "")
+#     # finally:
+#     #     # Clean up temporary file
+#     #     os.unlink(temp_file_path)
 
-    r = sr.Recognizer()
-    with sr.AudioFile(audio_file) as source:
-        audio = r.record(source)
+#     r = sr.Recognizer()
+#     with sr.AudioFile(audio_file) as source:
+#         audio = r.record(source)
 
-    try:
-        result = r.recognize_google(audio, language="en-US")
-        logger.info(colored(f"📝 Result: {result}", "green", attrs=["bold"]))
-    except sr.UnknownValueError:
-        logger.error(colored("❌ Cannot recognize speech.", "red", attrs=["bold"]))
-    except sr.RequestError as e:
-        logger.error(colored(f"⚠️ Error calling Google Speech API: {e}", "yellow", attrs=["bold"]))
+#     try:
+#         result = r.recognize_google(audio, language="en-US")
+#         logger.info(colored(f"📝 Result: {result}", "green", attrs=["bold"]))
+#     except sr.UnknownValueError:
+#         logger.error(colored("❌ Cannot recognize speech.", "red", attrs=["bold"]))
+#     except sr.RequestError as e:
+        # logger.error(colored(f"⚠️ Error calling Google Speech API: {e}", "yellow", attrs=["bold"]))
 
 AiRouter = APIRouter(
     prefix="/ai", tags=["Chat AI"]
@@ -191,9 +192,9 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         try:
 
             # Save audio file temporarily
-            # audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-            # temp_audio_path = f"/tmp/{audio_filename}"
-            # await text_to_speech(response_text, temp_audio_path)
+            audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            temp_audio_path = f"/tmp/{audio_filename}"
+            await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice="Fritz-PlayAI")
             # audio_content = await text_to_speech(response_text)
             
             
@@ -204,8 +205,8 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             response_with_audio = ChatResponse(
                 sessionId=request.sessionId,
                 response=response_text,
-                error_status="success" if response.get('success', True) else "error",
-                # audio_file_url=f"/ai/download/audio/{audio_filename}"
+                # error_status="success" if response.get('success', True) else "error",
+                audio_file_url=f"/ai/download/audio/{audio_filename}"
             )
             
             # Schedule cleanup of temporary file after some time
@@ -270,7 +271,7 @@ async def chat_audio(
             raise HTTPException(status_code=400, detail="File must be an audio file")
         
         # Convert audio to text
-        transcribed_text = await speech_to_text(audio_file)
+        transcribed_text = await speech_to_text(CLIENT, audio_file)
         logger.info(f'📝 Transcribed text: {transcribed_text}')
         
         if not transcribed_text.strip():
@@ -314,12 +315,12 @@ async def chat_audio(
         # Generate audio file from response text
         audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
         temp_audio_path = f"/tmp/{audio_filename}"
-        await text_to_speech(response_text, temp_audio_path)
+        await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice="Fritz-PlayAI")
         # audio_content = await text_to_speech(response_text)
 
         # # Save audio file temporarily
-        # audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-        # temp_audio_path = f"/tmp/{audio_filename}"
+        audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+        temp_audio_path = f"/tmp/{audio_filename}"
         
         # with open(temp_audio_path, 'wb') as f:
         #     f.write(audio_content)
