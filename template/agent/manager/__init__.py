@@ -23,7 +23,12 @@ from template.agent.manager.fast_path import get_fast_path_classifier
 from template.message.message import HumanMessage, SystemMessage
 from template.message.converter import convert_messages_list
 from template.agent.histories import RedisSupportChatHistory
-
+from template.agent.manager.tools import (
+    get_current_time, GetCurrentTimeInput,
+    get_weather, GetWeatherInput
+)
+from pydantic import BaseModel, Field
+from langchain_core.tools import StructuredTool
 from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import StateGraph, END, START
 from termcolor import colored
@@ -75,6 +80,21 @@ class ManagerAgent(BaseAgent):
             ttl=env.TTL_SECONDS
         )
 
+        self.tools = [
+            StructuredTool(
+                name="get_current_time",
+                description="Get the current date and time in format DD/MM/YYYY HH:MM:SS",
+                func=get_current_time,
+                args_schema=GetCurrentTimeInput
+            ),
+            StructuredTool(
+                name="get_weather",
+                description="Get current weather for a given city. Input parameter: city (string), Example: {'city': 'Hanoi'}",
+                func=get_weather,
+                args_schema=GetWeatherInput
+            )
+        ]
+
         logger.info(colored(f"Manager Agent using model: {model}", "green", attrs=["bold"]))
         logger.info(colored(f"Manager Agent language code: {language_code}", "cyan", attrs=["bold"]))
 
@@ -84,6 +104,7 @@ class ManagerAgent(BaseAgent):
         else:
             self.llm = ChatVertexAI(
                 model_name=model,
+                tools = self.tools,
                 temperature=temperature,
                 project=env.GOOGLE_CLOUD_PROJECT,
                 location=env.GOOGLE_CLOUD_LOCATION
@@ -596,10 +617,102 @@ IMPORTANT LANGUAGE INSTRUCTION:
                         }
                 else:
                     # Handle other direct responses
+                    user_input = state.get('input', '').lower()
                     reasoning_result = state.get('reasoning_result', {})
                     direct_answer = reasoning_result.get('direct_answer')
                     
-                    if not direct_answer:
+                    # ⚠️ CRITICAL: Check for weather query first
+                    weather_keywords = ['thời tiết', 'weather', 'nhiệt độ', 'temperature', 'mưa', 'rain', 'nắng', 'sunny', 'nóng', 'lạnh', 'hot', 'cold']
+                    is_weather_query = any(keyword in user_input for keyword in weather_keywords)
+                    
+                    # Check for time/date query (exclude weather queries)
+                    time_keywords = ['what day', 'what time', 'ngày bao nhiêu', 'giờ mấy', 
+                                    'ngày hôm nay', 'hôm nay ngày', 'date', 'today is',
+                                    'what is today', 'current date', 'current time']
+                    is_time_query = any(keyword in user_input for keyword in time_keywords) and not is_weather_query
+                    
+                    # Handle weather query with default location
+                    if is_weather_query:
+                        try:
+                            from template.agent.manager.tools import get_weather
+                            # Extract city if mentioned, otherwise use default
+                            default_city = "Hanoi"  # Default location
+                            city = default_city
+                            
+                            # Try to extract city name from query
+                            city_patterns = [
+                                'ở ', 'tại ', 'in ', 'at ',
+                                'hà nội', 'hanoi', 'hồ chí minh', 'ho chi minh', 'saigon', 'sài gòn',
+                                'đà nẵng', 'da nang', 'huế', 'hue', 'cần thơ', 'can tho'
+                            ]
+                            
+                            for pattern in city_patterns:
+                                if pattern in user_input:
+                                    if pattern == 'hà nội' or pattern == 'hanoi':
+                                        city = 'Hanoi'
+                                    elif pattern == 'hồ chí minh' or pattern == 'ho chi minh' or pattern == 'saigon' or pattern == 'sài gòn':
+                                        city = 'Ho Chi Minh City'
+                                    elif pattern == 'đà nẵng' or pattern == 'da nang':
+                                        city = 'Da Nang'
+                                    elif pattern == 'huế' or pattern == 'hue':
+                                        city = 'Hue'
+                                    elif pattern == 'cần thơ' or pattern == 'can tho':
+                                        city = 'Can Tho'
+                                    break
+                            
+                            # Pass language_code to get_weather for proper language support
+                            weather_info = get_weather(city, self.language_code)
+                            
+                            # Format response based on language
+                            if self.language_code.startswith('vi'):
+                                direct_answer = f"🌤️ **Thông tin thời tiết {city}**\n\n{weather_info}"
+                            else:
+                                direct_answer = f"🌤️ **Weather Information for {city}**\n\n{weather_info}"
+                            
+                            logger.info(colored(f"🌤️ Weather tool called for: {city} (lang: {self.language_code})", "cyan", attrs=["bold"]))
+                            
+                        except Exception as e:
+                            logger.error(colored(f"❌ Error calling get_weather: {e}", "red"))
+                            if self.language_code.startswith('vi'):
+                                direct_answer = "Xin lỗi, tôi không thể lấy thông tin thời tiết lúc này. Vui lòng thử lại sau."
+                            else:
+                                direct_answer = "I apologize, but I'm unable to retrieve weather information right now."
+                    
+                    elif is_time_query:
+                        # Call get_current_time tool directly
+                        try:
+                            from template.agent.manager.tools import get_current_time
+                            current_time = get_current_time()
+                            
+                            # Parse the time format (DD/MM/YYYY HH:MM:SS)
+                            # Format: 12/11/2025 14:30:15
+                            import datetime
+                            date_parts = current_time.split()[0].split('/')  # ["12", "11", "2025"]
+                            day, month, year = date_parts[0], date_parts[1], date_parts[2]
+                            
+                            # Create language-appropriate response based on language_code
+                            if self.language_code.startswith('vi'):
+                                # Vietnamese response
+                                month_names = {
+                                    '01': 'tháng 1', '02': 'tháng 2', '03': 'tháng 3', '04': 'tháng 4',
+                                    '05': 'tháng 5', '06': 'tháng 6', '07': 'tháng 7', '08': 'tháng 8',
+                                    '09': 'tháng 9', '10': 'tháng 10', '11': 'tháng 11', '12': 'tháng 12'
+                                }
+                                direct_answer = f"Hôm nay là ngày {day} {month_names.get(month, f'tháng {month}')} năm {year}."
+                            else:
+                                # English response
+                                dt = datetime.datetime.strptime(current_time.split()[0], '%d/%m/%Y')
+                                formatted_date = dt.strftime('%B %d, %Y')
+                                direct_answer = f"Today is {formatted_date}."
+                            
+                            logger.info(colored(f"⏰ Time tool called: {current_time}", "cyan", attrs=["bold"]))
+                            logger.info(colored(f"📅 Formatted response: {direct_answer}", "green", attrs=["bold"]))
+                            
+                        except Exception as e:
+                            logger.error(colored(f"❌ Error calling get_current_time: {e}", "red"))
+                            direct_answer = "I apologize, but I'm unable to retrieve the current date and time right now."
+                    
+                    elif not direct_answer:
                         # Provide default helpful response based on query type
                         if query_type == 'information':
                             direct_answer = """🏠 **Smart Home Information**

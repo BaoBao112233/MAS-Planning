@@ -59,6 +59,8 @@ class EnvironmentSettings(BaseSettings):
     LANGFUSE_PROJECT_NAME: str = "MAS-Planning"
     # Google API settings
     GOOGLE_API_KEY: str
+    # Open WeatherMap API settings
+    OPEN_WEATHER_API_KEY: str
     # Debug settings
     MCP_SERVER_URL: str
     MAX_ITERATIONS: int = 10

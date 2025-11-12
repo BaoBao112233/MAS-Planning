@@ -2,6 +2,7 @@ import os
 import tempfile
 import logging
 import wave
+import re
 from typing import Dict, List, Optional
 from fastapi import UploadFile, HTTPException
 from termcolor import colored
@@ -15,6 +16,100 @@ CLIENT_CONFIG = {"api_key": env.GOOGLE_API_KEY}
 # Cache for available voices
 _VOICES_CACHE: Optional[Dict] = None
 
+# Reusable clients for better performance
+_TTS_CLIENT: Optional[texttospeech.TextToSpeechClient] = None
+_STT_CLIENT: Optional[speech.SpeechClient] = None
+
+
+def get_tts_client() -> texttospeech.TextToSpeechClient:
+    """Get or create reusable TTS client"""
+    global _TTS_CLIENT
+    if _TTS_CLIENT is None:
+        _TTS_CLIENT = texttospeech.TextToSpeechClient(client_options=CLIENT_CONFIG)
+    return _TTS_CLIENT
+
+
+def get_stt_client() -> speech.SpeechClient:
+    """Get or create reusable STT client"""
+    global _STT_CLIENT
+    if _STT_CLIENT is None:
+        _STT_CLIENT = speech.SpeechClient(client_options=CLIENT_CONFIG)
+    return _STT_CLIENT
+
+
+def clean_text_for_tts(text: str) -> str:
+    """
+    Clean text before sending to TTS by removing unnecessary characters.
+    
+    Removes:
+    - Markdown formatting (**, __, *, _, [], (), etc.)
+    - Emoji and special symbols
+    - Multiple spaces
+    - HTML tags
+    - Special punctuation that TTS doesn't handle well
+    
+    Args:
+        text: Raw text with markdown/emoji/symbols
+        
+    Returns:
+        Cleaned text suitable for TTS
+    """
+    if not text:
+        return text
+    
+    # Remove markdown bold/italic (**text**, __text__, *text*, _text_)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # **bold**
+    text = re.sub(r'__(.+?)__', r'\1', text)      # __bold__
+    text = re.sub(r'\*(.+?)\*', r'\1', text)      # *italic*
+    text = re.sub(r'_(.+?)_', r'\1', text)        # _italic_
+    
+    # Remove markdown headers (##, ###, etc.)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    
+    # Remove markdown links [text](url) -> text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    
+    # Remove markdown code blocks ```code``` -> code
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    
+    # Remove bullet points and list markers
+    text = re.sub(r'^[\s]*[•\-\*\+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+    
+    # Remove emoji (Unicode ranges for emoji)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"  # dingbats
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA00-\U0001FA6F"
+        "]+", flags=re.UNICODE
+    )
+    text = emoji_pattern.sub('', text)
+    
+    # Remove special symbols and icons (🏠, 🤖, ✅, ❌, etc.)
+    text = re.sub(r'[🏠🤖🔧🧠📋⚙️🔑🎤🌍🎙️✅❌⚠️🔴🟡📅⏰💡🔥🎯]', '', text)
+    
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Remove XML tags (like <reasoning>, <agent_type>, etc.)
+    text = re.sub(r'</?[a-zA-Z_]+>', '', text)
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text)  # Multiple spaces -> single space
+    text = re.sub(r'\n\s*\n', '\n', text)  # Multiple newlines -> single newline
+    
+    # Remove leading/trailing whitespace
+    text = text.strip()
+    
+    return text
+
 def get_wav_sample_rate(file_path: str) -> int:
     """Detect sample rate from WAV file"""
     try:
@@ -27,52 +122,52 @@ def get_wav_sample_rate(file_path: str) -> int:
         return 16000
 
 async def speech_to_text(audio_file: UploadFile) -> str:
-    """Convert speech to text using Google Cloud Speech-to-Text"""
+    """Convert speech to text using Google Cloud Speech-to-Text (optimized)"""
     temp_file_path = None
-    logger.info(colored("🎧 Converting speech to text with Google Speech-to-Text...", "green", attrs=["bold"]))
-    logger.info(colored(f"Client config: {CLIENT_CONFIG}", "green", attrs=["bold"]))
     try:
-        # Lưu file tạm thời
+        # Lưu file tạm thời (tối ưu hóa)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
             content = await audio_file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
 
-        # Detect sample rate từ WAV file
+        # Detect sample rate nhanh
         sample_rate = get_wav_sample_rate(temp_file_path) if temp_file_path.endswith(".wav") else 16000
         
         # Đọc file
         with open(temp_file_path, "rb") as f:
             content = f.read()
 
-        client = speech.SpeechClient(client_options=CLIENT_CONFIG)
+        # Sử dụng reusable client
+        client = get_stt_client()
         audio = speech.RecognitionAudio(content=content)
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16
             if temp_file_path.endswith(".wav")
             else speech.RecognitionConfig.AudioEncoding.MP3,
-            sample_rate_hertz=sample_rate,  # Sử dụng sample rate đã detect
+            sample_rate_hertz=sample_rate,
             language_code="vi-VN",
             enable_automatic_punctuation=True,
+            use_enhanced=True,  # Sử dụng model tốt hơn
+            model="latest_short",  # Model tối ưu cho audio ngắn
         )
 
         response = client.recognize(config=config, audio=audio)
         result = " ".join([r.alternatives[0].transcript for r in response.results])
 
-        logger.info(colored(f"📝 Transcription result: {result}", "green", attrs=["bold"]))
+        logger.info(colored(f"📝 STT result: {result[:100]}...", "green"))
         return result
 
     except Exception as e:
-        logger.error(colored(f"❌ Error transcribing audio: {e}", "red", attrs=["bold"]))
+        logger.error(colored(f"❌ STT error: {e}", "red"))
         raise HTTPException(status_code=500, detail=f"Failed to convert speech to text: {str(e)}")
 
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
-                logger.info(colored("🗑️ Temporary file cleaned up", "yellow"))
             except Exception as e:
-                logger.warning(colored(f"⚠️ Failed to delete temporary file: {e}", "yellow"))
+                logger.warning(colored(f"⚠️ Failed to delete temp file: {e}", "yellow"))
 
 
 def get_available_voices() -> Dict[str, Dict[str, List[Dict]]]:
@@ -101,7 +196,7 @@ def get_available_voices() -> Dict[str, Dict[str, List[Dict]]]:
     
     try:
         logger.info(colored("🔍 Fetching available voices from Google Cloud TTS...", "cyan", attrs=["bold"]))
-        client = texttospeech.TextToSpeechClient(client_options=CLIENT_CONFIG)
+        client = get_tts_client()  # Sử dụng reusable client
         response = client.list_voices()
         
         # Structure: {language_code: {model_type: [voices]}}
@@ -181,51 +276,56 @@ async def text_to_speech_with_voice(
     language_code: str = "vi-VN"
 ):
     """
-    Convert text to speech using Google Cloud TTS with hierarchical voice selection.
+    Convert text to speech using Google Cloud TTS (optimized for speed).
     
     Args:
-        text: Text to convert to speech
+        text: Text to convert to speech (will be cleaned automatically)
         path: Output file path for the audio
         voice_name: Full voice name (e.g., "vi-VN-Neural2-A")
         language_code: Language code (e.g., "vi-VN")
     """
-    logger.info(colored(f"Client config: {CLIENT_CONFIG}", "green", attrs=["bold"]))
-    
-    try:            
-        logger.info(colored(
-            f"🎤 Generating speech with Google TTS\n"
-            f"   Language: {language_code}\n"
-            f"   Voice: {voice_name}\n"
-            f"   Text: {text[:50]}...",
-            "green", attrs=["bold"]
-        ))
+    try:
+        # Clean text before TTS
+        cleaned_text = clean_text_for_tts(text)
         
-        client = texttospeech.TextToSpeechClient(client_options=CLIENT_CONFIG)
-        synthesis_input = texttospeech.SynthesisInput(text=text)
+        # Minimal logging
+        if len(text) != len(cleaned_text):
+            logger.info(colored(
+                f"🧹 Text cleaned: {len(text)} → {len(cleaned_text)} chars",
+                "yellow"
+            ))
+        
+        # Sử dụng reusable client
+        client = get_tts_client()
+        synthesis_input = texttospeech.SynthesisInput(text=cleaned_text)
         voice_params = texttospeech.VoiceSelectionParams(
             language_code=language_code,
             name=voice_name,
         )
+        
+        # Sử dụng MP3 (nhẹ hơn LINEAR16) và tăng tốc độ đọc
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.LINEAR16
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=1.15,  # Đọc nhanh hơn 15%
+            pitch=0.0,
         )
 
+        # Gọi API
         response = client.synthesize_speech(
             input=synthesis_input,
             voice=voice_params,
             audio_config=audio_config
         )
 
-        # Lưu file WAV
+        # Lưu file MP3
         with open(path, "wb") as out:
             out.write(response.audio_content)
 
-        logger.info(colored(f"💾 Export WAV to {path}", "green", attrs=["bold"]))
-        logger.info(colored("✅ Speech generation completed", "green", attrs=["bold"]))
+        logger.info(colored(f"✅ TTS completed: {path}", "green"))
 
     except Exception as e:
         error_message = str(e).lower()
-        logger.error(colored(f"❌ Error generating speech: {e}", "red", attrs=["bold"]))
+        logger.error(colored(f"❌ TTS error: {e}", "red"))
         
         if any(keyword in error_message for keyword in ["rate", "quota", "limit", "429"]):
             raise HTTPException(
