@@ -25,6 +25,10 @@ async function sendMessage() {
     const sessionId = document.getElementById('sessionId').value;
     const conversationId = document.getElementById('conversationId').value;
     const token = document.getElementById('token').value;
+    const voice = document.getElementById('voiceSelect').value;
+
+    console.log('🎤 Selected voice:', voice);
+    console.log('📤 Request data:', { conversationId, sessionId, token, message, voice });
 
     // Add user message to chat
     addMessage(message, 'user');
@@ -40,8 +44,11 @@ async function sendMessage() {
             conversationId: conversationId,
             sessionId: sessionId,
             token: token,
-            message: message
+            message: message,
+            voice: voice
         };
+
+        console.log('🚀 Sending request with voice:', requestData.voice);
 
         // Send request to API
         const response = await fetch('/ai/chat/text', {
@@ -83,7 +90,13 @@ function addMessage(text, sender, audioUrl = null) {
     
     let audioControls = '';
     if (audioUrl && sender === 'bot') {
+        const voiceSelect = document.getElementById('voiceSelect');
+        const voiceName = voiceSelect.options[voiceSelect.selectedIndex].text;
         audioControls = `
+            <div class="voice-indicator">
+                <i class="fas fa-microphone-alt"></i>
+                <span>Voice: ${voiceName}</span>
+            </div>
             <div class="audio-controls-inline">
                 <button class="audio-btn" onclick="playInlineAudio('${audioUrl}')">
                     <i class="fas fa-play"></i> Phát Audio
@@ -296,4 +309,30 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!document.getElementById('conversationId').value) {
         document.getElementById('conversationId').value = `conv-${Math.random().toString(36).substr(2, 9)}`;
     }
+    
+    // Add voice selector change listener
+    const voiceSelect = document.getElementById('voiceSelect');
+    voiceSelect.addEventListener('change', function() {
+        const selectedVoice = this.value;
+        const voiceName = this.options[this.selectedIndex].text;
+        console.log(`🎤 Voice changed to: ${selectedVoice}`);
+        showNotification(`Giọng nói đã được chọn: ${voiceName}`, 'info');
+    });
+    
+    // Show initial voice
+    const initialVoice = voiceSelect.options[voiceSelect.selectedIndex].text;
+    console.log(`🎤 Initial voice: ${initialVoice}`);
 });
+
+// Debug function for testing - can be called from browser console
+window.testVoiceSelection = function() {
+    const voiceSelect = document.getElementById('voiceSelect');
+    console.log('=== Voice Selection Debug ===');
+    console.log('Selected index:', voiceSelect.selectedIndex);
+    console.log('Selected value:', voiceSelect.value);
+    console.log('Selected text:', voiceSelect.options[voiceSelect.selectedIndex].text);
+    console.log('All options:', Array.from(voiceSelect.options).map(opt => ({ value: opt.value, text: opt.text })));
+    return voiceSelect.value;
+};
+
+console.log('✅ Voice debug function loaded. Type testVoiceSelection() in console to debug.');

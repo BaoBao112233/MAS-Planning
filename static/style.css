@@ -114,11 +114,33 @@ body {
 }
 
 /* Audio Controls in Messages */
+.voice-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.voice-indicator i {
+    font-size: 12px;
+    width: auto;
+    height: auto;
+    background: none;
+    color: white;
+}
+
 .audio-controls-inline {
     margin-top: 10px;
     display: flex;
     gap: 10px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .audio-btn {
@@ -211,19 +233,46 @@ body {
     font-weight: 600;
     color: #495057;
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
-.config-row input {
+.config-row input, .config-row select {
     padding: 8px 12px;
     border: 1px solid #ced4da;
     border-radius: 6px;
     font-size: 14px;
 }
 
-.config-row input:focus {
+.config-row input:focus, .config-row select:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.voice-select {
+    background: white;
+    cursor: pointer;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: all 0.3s ease;
+    background-image: linear-gradient(45deg, transparent 50%, #667eea 50%), 
+                      linear-gradient(135deg, #667eea 50%, transparent 50%);
+    background-position: calc(100% - 20px) calc(1em + 2px), 
+                         calc(100% - 15px) calc(1em + 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 35px;
+}
+
+.voice-select:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.voice-select option {
+    padding: 10px;
+    font-size: 14px;
 }
 
 /* Loading */

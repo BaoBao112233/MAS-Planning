@@ -21,6 +21,25 @@
 - **Session ID**: Quản lý phiên chat
 - **Conversation ID**: Theo dõi cuộc hội thoại
 - **Token**: Authentication token
+- **Voice**: Chọn giọng nói cho Text-to-Speech (19 giọng khác nhau)
+
+## 🎤 Voice Selection (MỚI!)
+
+Demo hiện hỗ trợ chọn giọng nói từ 19 giọng PlayAI khác nhau:
+
+**Danh sách giọng:**
+- Fritz (Default)
+- Arista, Atlas, Basil, Briggs
+- Calum, Celeste, Cheyenne, Chip
+- Cillian, Deedee, Gail, Indigo
+- Mamaw, Mason, Mikail, Mitch
+- Quinn, Thunder
+
+**Cách sử dụng:**
+1. Chọn giọng từ dropdown "Voice" trong config panel
+2. Gửi tin nhắn như bình thường
+3. Bot response sẽ được tạo bằng giọng đã chọn
+4. Mỗi message hiển thị giọng đã sử dụng
 
 ## Cách sử dụng
 
@@ -86,7 +105,8 @@ static/
     "conversationId": "conv-xxx",
     "sessionId": "session-xxx", 
     "token": "token-xxx",
-    "message": "User message text"
+    "message": "User message text",
+    "voice": "Fritz-PlayAI"
 }
 ```
 

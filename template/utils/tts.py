@@ -76,21 +76,48 @@ async def text_to_speech_with_voice(client: Groq, text: str, path: str, voice: s
         logger.warning(colored(f"⚠️ Voice '{voice}' not available. Using default 'Fritz-PlayAI'", "yellow"))
         voice = "Fritz-PlayAI"
     
-    try:
-        logger.info(colored(f"🎤 Generating speech with voice: {voice}", "green", attrs=["bold"]))
-        
-        response = client.audio.speech.create(
-            model=env.GROQ_MODEL_VOICE_1,
-            voice=voice,
-            input=text,
-            response_format="wav"
-        )
-        
-        logger.info(colored(f"💾 Export WAV to {path}", "green", attrs=["bold"]))
-        response.write_to_file(path)
-        
-        logger.info(colored("✅ Speech generation completed", "green", attrs=["bold"]))
-        
-    except Exception as e:
-        logger.error(colored(f"❌ Error generating speech: {e}", "red", attrs=["bold"]))
-        raise HTTPException(status_code=500, detail=f"Failed to generate speech: {str(e)}")
+    models_to_try = [env.GROQ_MODEL_VOICE_1, env.GROQ_MODEL_VOICE_2]
+    
+    for idx, model in enumerate(models_to_try):
+        try:
+            logger.info(colored(f"🎤 Generating speech with voice: {voice} (model: {model})", "green", attrs=["bold"]))
+            
+            response = client.audio.speech.create(
+                model=model,
+                voice=voice,
+                input=text,
+                response_format="wav"
+            )
+            
+            logger.info(colored(f"💾 Export WAV to {path}", "green", attrs=["bold"]))
+            response.write_to_file(path)
+            
+            logger.info(colored("✅ Speech generation completed", "green", attrs=["bold"]))
+            return  # Success, exit function
+            
+        except Exception as e:
+            error_message = str(e).lower()
+            
+            # Check if it's a rate limit or quota error
+            if any(keyword in error_message for keyword in ["rate", "quota", "limit", "429"]):
+                if idx < len(models_to_try) - 1:  # Not the last model
+                    logger.warning(colored(
+                        f"⚠️ Model {model} hit rate limit/quota. Switching to backup model...", 
+                        "yellow", 
+                        attrs=["bold"]
+                    ))
+                    continue  # Try next model
+                else:  # Last model also failed
+                    logger.error(colored(
+                        f"❌ All models exhausted. Error: {e}", 
+                        "red", 
+                        attrs=["bold"]
+                    ))
+                    raise HTTPException(
+                        status_code=429, 
+                        detail="All TTS models have exceeded their rate limits. Please try again later."
+                    )
+            else:
+                # Other type of error, don't retry
+                logger.error(colored(f"❌ Error generating speech: {e}", "red", attrs=["bold"]))
+                raise HTTPException(status_code=500, detail=f"Failed to generate speech: {str(e)}")

@@ -150,6 +150,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         # Lấy prompt từ file JSON nếu có chatId
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
         logger.info(f'🔑 Token received: {request.token[:10] if request.token else "None"}...')
+        logger.info(f'🎤 Voice selected: {request.voice}')
         
         agent = ManagerAgent(
             temperature=0.2,
@@ -160,7 +161,9 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             max_iteration=env.MAX_ITERATIONS
         )
 
-        voice = request.voice if hasattr(request, 'voice') else "Fritz-PlayAI"
+        # Get voice from request, use default if not provided
+        voice = request.voice if request.voice else "Fritz-PlayAI"
+        logger.info(f'🎙️  Using voice: {voice}')
 
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   
