@@ -143,7 +143,6 @@ Router = APIRouter()
 cache = TTLCache(maxsize=500, ttl=300)
 
 
-@AiRouter.get("/voices")
 @AiRouter.get("/list/voices")
 async def get_available_voices():
     """
