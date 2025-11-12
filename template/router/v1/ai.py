@@ -143,7 +143,7 @@ Router = APIRouter()
 cache = TTLCache(maxsize=500, ttl=300)
 
 
-@AiRouter.get("/list/voices")
+@AiRouter.get("/voices")
 async def get_available_voices():
     """
     Get all available voices from Google Cloud Text-to-Speech API.
