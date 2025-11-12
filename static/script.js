@@ -256,10 +256,12 @@ async function sendMessage() {
             sessionId: sessionId,
             token: token,
             message: message,
-            voice: voice
+            voice: voice,
+            language_code: language  // Send language code to backend
         };
 
         console.log('🚀 Sending request with voice:', requestData.voice);
+        console.log('🌍 Sending request with language_code:', requestData.language_code);
 
         // Send request to API
         const response = await fetch('/ai/chat/text', {

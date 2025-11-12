@@ -60,10 +60,12 @@ class ManagerAgent(BaseAgent):
                  temperature: float = 0.2, 
                  max_iteration: int = 5,
                  verbose: bool = False,
-                 llm=None):
+                 llm=None,
+                 language_code: str = "en-US"):
         super().__init__()
         
         self.name = "Manager Agent"
+        self.language_code = language_code  # Store language code for prompt customization
         
         # Chat history for conversation context
         self.session_id = session_id
@@ -74,6 +76,7 @@ class ManagerAgent(BaseAgent):
         )
 
         logger.info(colored(f"Manager Agent using model: {model}", "green", attrs=["bold"]))
+        logger.info(colored(f"Manager Agent language code: {language_code}", "cyan", attrs=["bold"]))
 
         # LLM configuration
         if llm:
@@ -88,7 +91,9 @@ class ManagerAgent(BaseAgent):
         
         self.max_iteration = max_iteration
         self.verbose = verbose
-        self.system_prompt = MANAGER_PROMPT
+        
+        # Create language-aware system prompt
+        self.system_prompt = self._create_language_aware_prompt(language_code)
         
         # Lazy-loaded agents
         self._plan_agent = None
@@ -108,6 +113,50 @@ class ManagerAgent(BaseAgent):
         if self.verbose:
             logger.info(f"✅ {self.name} initialized successfully")
             logger.info(f"⚡ Fast-path optimization: {'enabled' if self.use_fast_path else 'disabled'}")
+    
+    def _create_language_aware_prompt(self, language_code: str) -> str:
+        """
+        Create a language-aware system prompt based on language code.
+        
+        Args:
+            language_code: Language code (e.g., 'en-US', 'vi-VN', 'zh-CN')
+            
+        Returns:
+            str: System prompt with language instruction
+        """
+        # Language mapping for clear instructions
+        language_names = {
+            "en-US": "English (US)",
+            "en-GB": "English (UK)",
+            "vi-VN": "Vietnamese",
+            "zh-CN": "Chinese (Simplified)",
+            "zh-TW": "Chinese (Traditional)",
+            "ja-JP": "Japanese",
+            "ko-KR": "Korean",
+            "fr-FR": "French",
+            "de-DE": "German",
+            "es-ES": "Spanish",
+            "it-IT": "Italian",
+            "pt-BR": "Portuguese (Brazil)",
+            "ru-RU": "Russian",
+            "ar-XA": "Arabic",
+            "hi-IN": "Hindi",
+            "th-TH": "Thai",
+        }
+        
+        language_name = language_names.get(language_code, "English (US)")
+        
+        # Add language instruction to base prompt
+        language_instruction = f"""
+
+IMPORTANT LANGUAGE INSTRUCTION:
+- You MUST respond to the user in {language_name} (language code: {language_code}).
+- All your responses, explanations, and communications should be in {language_name}.
+- Maintain natural and fluent language throughout the conversation.
+- If the user's query is in a different language, still respond in {language_name} unless they explicitly ask otherwise.
+"""
+        
+        return MANAGER_PROMPT + language_instruction
     
     @property
     def plan_agent(self):

@@ -36,6 +36,7 @@ class ChatRequestAPI(BaseModel):
     token: Optional[str] = Field("", description="Authentication token if required") 
     message: str = Field(..., description="User message to process")
     voice: Optional[str] = Field("Fritz-PlayAI", description="Voice to use for text-to-speech")
+    language_code: Optional[str] = Field("en-US", description="Language code for AI response (e.g., 'en-US', 'vi-VN')")
     
 # Response models
 class APIResponse(BaseModel):

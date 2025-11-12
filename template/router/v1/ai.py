@@ -189,6 +189,10 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         logger.info(f'⚙️  sessionId: {request.sessionId} | message: {request.message}')
         logger.info(f'🔑 Token received: {request.token[:10] if request.token else "None"}...')
         logger.info(f'🎤 Voice selected: {request.voice}')
+        logger.info(f'🌍 Language code received: {request.language_code}')
+        
+        # Get language code from request, default to en-US if not provided
+        language_code = request.language_code if request.language_code else "en-US"
         
         agent = ManagerAgent(
             temperature=0.2,
@@ -196,12 +200,12 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             verbose=True,
             session_id=request.sessionId,
             conversation_id=request.conversationId,
-            max_iteration=env.MAX_ITERATIONS
+            max_iteration=env.MAX_ITERATIONS,
+            language_code=language_code  # Pass language code to agent
         )
 
         # Get voice from request, use default if not provided
-        voice_name = request.voice if request.voice else "vi-VN-Neural2-A"
-        language_code = "vi-VN"  # Default to Vietnamese, can be made configurable later
+        voice_name = request.voice if request.voice else "en-US-Neural2-A"
         logger.info(f'🎙️  Using voice: {voice_name} for language: {language_code}')
 
         # Check if this is a plan selection and retrieve cached plan options
