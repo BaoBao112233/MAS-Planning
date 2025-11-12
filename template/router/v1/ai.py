@@ -31,7 +31,7 @@ from template.schemas.model import (
     PlanOption,
     PlanSelectionRequest
 )
-from template.utils.tts import text_to_speech_with_voice, speech_to_text, CLIENT
+from template.utils.tts import text_to_speech_with_voice, speech_to_text
 
 from gtts import gTTS
 from pydub import AudioSegment
@@ -143,6 +143,44 @@ Router = APIRouter()
 cache = TTLCache(maxsize=500, ttl=300)
 
 
+@AiRouter.get("/voices")
+@AiRouter.get("/list/voices")
+async def get_available_voices():
+    """
+    Get all available voices from Google Cloud Text-to-Speech API.
+    Returns a hierarchical structure: language_code -> model_type -> voices
+    """
+    try:
+        logger.info(colored("🎤 Fetching available voices...", "cyan", attrs=["bold"]))
+        
+        from template.utils.tts import get_available_voices
+        voices = get_available_voices()
+        
+        # Log summary
+        total_languages = len(voices)
+        total_voices = sum(len(model_voices) for lang in voices.values() for model_voices in lang.values())
+        logger.info(colored(
+            f"✅ Returning {total_voices} voices across {total_languages} languages",
+            "green", attrs=["bold"]
+        ))
+        
+        return {
+            "success": True,
+            "data": voices,
+            "summary": {
+                "total_languages": total_languages,
+                "total_voices": total_voices
+            }
+        }
+        
+    except Exception as e:
+        logger.error(colored(f"❌ Error fetching voices: {e}", "red", attrs=["bold"]))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch available voices: {str(e)}"
+        )
+
+
 @AiRouter.post("/chat/text", response_model=ChatResponse)
 async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
     """Process a text chat message and return response with audio file"""
@@ -162,8 +200,9 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         )
 
         # Get voice from request, use default if not provided
-        voice = request.voice if request.voice else "Fritz-PlayAI"
-        logger.info(f'🎙️  Using voice: {voice}')
+        voice_name = request.voice if request.voice else "vi-VN-Neural2-A"
+        language_code = "vi-VN"  # Default to Vietnamese, can be made configurable later
+        logger.info(f'🎙️  Using voice: {voice_name} for language: {language_code}')
 
         # Check if this is a plan selection and retrieve cached plan options
         session_key = f"{request.sessionId}_{request.conversationId}"   
@@ -199,7 +238,7 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             # Save audio file temporarily
             audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
             temp_audio_path = f"/tmp/{audio_filename}"
-            await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice)
+            await text_to_speech_with_voice(response_text, temp_audio_path, voice_name, language_code)
             # audio_content = await text_to_speech(response_text)
             
             
@@ -264,20 +303,21 @@ async def chat_audio(
     sessionId: str,
     conversationId: str,
     token: str,
-    voice: str = "Fritz-PlayAI",
+    voice: str = "vi-VN-Neural2-A",
     audio_file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None
 ):
     """Process an audio chat message and return response with both text and audio"""
     try:
         logger.info(f'🎵 Audio chat - sessionId: {sessionId} | file: {audio_file.filename}')
+        logger.info(f'🎙️  Using voice: {voice}')
         
         # Validate audio file
         if not audio_file.content_type.startswith('audio/'):
             raise HTTPException(status_code=400, detail="File must be an audio file")
         
         # Convert audio to text
-        transcribed_text = await speech_to_text(CLIENT, audio_file)
+        transcribed_text = await speech_to_text(audio_file)
         logger.info(f'📝 Transcribed text: {transcribed_text}')
         
         if not transcribed_text.strip():
@@ -321,7 +361,11 @@ async def chat_audio(
         # Generate audio file from response text
         audio_filename = f"response_{sessionId}_{conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
         temp_audio_path = f"/tmp/{audio_filename}"
-        await text_to_speech_with_voice(CLIENT, response_text, temp_audio_path, voice)
+        
+        # Use voice parameter with default language code
+        voice_name = voice
+        language_code = "vi-VN"  # Default to Vietnamese
+        await text_to_speech_with_voice(response_text, temp_audio_path, voice_name, language_code)
         # audio_content = await text_to_speech(response_text)
 
         # # Save audio file temporarily

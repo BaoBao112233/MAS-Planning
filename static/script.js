@@ -1,5 +1,9 @@
 // Global variables
 let currentAudioUrl = null;
+let voicesData = {}; // Store the complete voices structure
+let currentLanguage = '';
+let currentModel = '';
+let currentVoice = '';
 
 // DOM Elements
 const messageInput = document.getElementById('messageInput');
@@ -17,6 +21,209 @@ messageInput.addEventListener('keypress', function(e) {
     }
 });
 
+// Load available voices from API
+async function loadVoices() {
+    try {
+        console.log('🔍 Loading voices from API...');
+        showNotification('Đang tải danh sách giọng nói...', 'info');
+        
+        const response = await fetch('/ai/voices');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error('Failed to load voices');
+        }
+        
+        voicesData = result.data;
+        console.log('✅ Loaded voices:', result.summary);
+        
+        // Populate language dropdown
+        populateLanguageDropdown();
+        
+        showNotification(`Đã tải ${result.summary.total_voices} giọng nói từ ${result.summary.total_languages} ngôn ngữ`, 'success');
+    } catch (error) {
+        console.error('Error loading voices:', error);
+        showNotification('Lỗi khi tải danh sách giọng nói: ' + error.message, 'error');
+    }
+}
+
+// Populate language dropdown
+function populateLanguageDropdown() {
+    const languageSelect = document.getElementById('languageSelect');
+    languageSelect.innerHTML = '<option value="">-- Chọn ngôn ngữ --</option>';
+    
+    // Sort languages alphabetically
+    const languages = Object.keys(voicesData).sort();
+    
+    languages.forEach(langCode => {
+        const option = document.createElement('option');
+        option.value = langCode;
+        option.textContent = `${langCode}`;
+        
+        // Pre-select Vietnamese if available
+        if (langCode === 'vi-VN') {
+            option.selected = true;
+            currentLanguage = langCode;
+        }
+        
+        languageSelect.appendChild(option);
+    });
+    
+    // If Vietnamese is preselected, populate models
+    if (currentLanguage) {
+        populateModelDropdown(currentLanguage);
+    }
+    
+    languageSelect.disabled = false;
+}
+
+// Populate model dropdown based on selected language
+function populateModelDropdown(languageCode) {
+    const modelSelect = document.getElementById('modelSelect');
+    const voiceSelect = document.getElementById('voiceSelect');
+    
+    if (!languageCode || !voicesData[languageCode]) {
+        modelSelect.innerHTML = '<option value="">Select language first</option>';
+        modelSelect.disabled = true;
+        voiceSelect.innerHTML = '<option value="">Select model first</option>';
+        voiceSelect.disabled = true;
+        return;
+    }
+    
+    modelSelect.innerHTML = '<option value="">-- Chọn model --</option>';
+    const models = Object.keys(voicesData[languageCode]).sort();
+    
+    // Prioritize Neural2, WaveNet, then others
+    const priorityOrder = ['Neural2', 'WaveNet', 'Chirp3-HD', 'Chirp-HD', 'Standard', 'Studio'];
+    const sortedModels = models.sort((a, b) => {
+        const aIndex = priorityOrder.indexOf(a);
+        const bIndex = priorityOrder.indexOf(b);
+        if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+    });
+    
+    sortedModels.forEach((model, index) => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        
+        // Pre-select Neural2 if available for Vietnamese
+        if (languageCode === 'vi-VN' && model === 'Neural2') {
+            option.selected = true;
+            currentModel = model;
+        }
+        
+        modelSelect.appendChild(option);
+    });
+    
+    modelSelect.disabled = false;
+    
+    // If model is preselected, populate voices
+    if (currentModel) {
+        populateVoiceDropdown(languageCode, currentModel);
+    }
+}
+
+// Populate voice dropdown based on selected language and model
+function populateVoiceDropdown(languageCode, model) {
+    const voiceSelect = document.getElementById('voiceSelect');
+    
+    if (!languageCode || !model || !voicesData[languageCode] || !voicesData[languageCode][model]) {
+        voiceSelect.innerHTML = '<option value="">Select model first</option>';
+        voiceSelect.disabled = true;
+        return;
+    }
+    
+    voiceSelect.innerHTML = '<option value="">-- Chọn giọng nói --</option>';
+    const voices = voicesData[languageCode][model];
+    
+    // Sort by gender (FEMALE first, then MALE)
+    const sortedVoices = voices.sort((a, b) => {
+        if (a.gender === b.gender) return a.name.localeCompare(b.name);
+        if (a.gender === 'FEMALE') return -1;
+        if (b.gender === 'FEMALE') return 1;
+        return a.gender.localeCompare(b.gender);
+    });
+    
+    sortedVoices.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = voice.voice_name;  // Use full voice_name for API
+        const genderIcon = voice.gender === 'FEMALE' ? '👩' : voice.gender === 'MALE' ? '👨' : '🧑';
+        option.textContent = `${genderIcon} ${voice.name} (${voice.gender})`;  // Display short name
+        
+        // Pre-select first voice for Vietnamese Neural2
+        if (languageCode === 'vi-VN' && model === 'Neural2' && index === 0) {
+            option.selected = true;
+            currentVoice = voice.voice_name;
+        }
+        
+        voiceSelect.appendChild(option);
+    });
+    
+    voiceSelect.disabled = false;
+}
+
+// Handle language selection change
+document.addEventListener('DOMContentLoaded', function() {
+    const languageSelect = document.getElementById('languageSelect');
+    const modelSelect = document.getElementById('modelSelect');
+    const voiceSelect = document.getElementById('voiceSelect');
+    
+    languageSelect.addEventListener('change', function() {
+        const selectedLanguage = this.value;
+        currentLanguage = selectedLanguage;
+        currentModel = '';
+        currentVoice = '';
+        
+        console.log('🌍 Language changed:', selectedLanguage);
+        
+        if (selectedLanguage) {
+            populateModelDropdown(selectedLanguage);
+            showNotification(`Ngôn ngữ đã chọn: ${selectedLanguage}`, 'info');
+        } else {
+            modelSelect.innerHTML = '<option value="">Select language first</option>';
+            modelSelect.disabled = true;
+            voiceSelect.innerHTML = '<option value="">Select model first</option>';
+            voiceSelect.disabled = true;
+        }
+    });
+    
+    modelSelect.addEventListener('change', function() {
+        const selectedModel = this.value;
+        currentModel = selectedModel;
+        currentVoice = '';
+        
+        console.log('🎨 Model changed:', selectedModel);
+        
+        if (selectedModel && currentLanguage) {
+            populateVoiceDropdown(currentLanguage, selectedModel);
+            showNotification(`Model đã chọn: ${selectedModel}`, 'info');
+        } else {
+            voiceSelect.innerHTML = '<option value="">Select model first</option>';
+            voiceSelect.disabled = true;
+        }
+    });
+    
+    voiceSelect.addEventListener('change', function() {
+        const selectedVoice = this.value;
+        currentVoice = selectedVoice;
+        
+        console.log('🎤 Voice changed:', selectedVoice);
+        
+        if (selectedVoice) {
+            showNotification(`Giọng nói đã chọn: ${selectedVoice}`, 'success');
+        }
+    });
+    
+    // Load voices on page load
+    loadVoices();
+});
+
 // Send message function
 async function sendMessage() {
     const message = messageInput.value.trim();
@@ -25,9 +232,13 @@ async function sendMessage() {
     const sessionId = document.getElementById('sessionId').value;
     const conversationId = document.getElementById('conversationId').value;
     const token = document.getElementById('token').value;
-    const voice = document.getElementById('voiceSelect').value;
+    
+    // Get selected voice details
+    const voice = currentVoice || 'vi-VN-Neural2-A'; // Fallback to default
+    const language = currentLanguage || 'vi-VN';
 
     console.log('🎤 Selected voice:', voice);
+    console.log('🌍 Selected language:', language);
     console.log('📤 Request data:', { conversationId, sessionId, token, message, voice });
 
     // Add user message to chat
@@ -66,7 +277,7 @@ async function sendMessage() {
         const data = await response.json();
         
         // Add bot response to chat
-        addMessage(data.response, 'bot', data.audio_file_url);
+        addMessage(data.response, 'bot', data.audio_file_url, voice, language, currentModel);
 
         // Show success notification
         showNotification('Tin nhắn đã được gửi thành công!', 'success');
@@ -82,7 +293,7 @@ async function sendMessage() {
 }
 
 // Add message to chat
-function addMessage(text, sender, audioUrl = null) {
+function addMessage(text, sender, audioUrl = null, voiceName = null, languageCode = null, modelType = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}-message`;
     
@@ -90,12 +301,14 @@ function addMessage(text, sender, audioUrl = null) {
     
     let audioControls = '';
     if (audioUrl && sender === 'bot') {
-        const voiceSelect = document.getElementById('voiceSelect');
-        const voiceName = voiceSelect.options[voiceSelect.selectedIndex].text;
+        const voiceInfo = voiceName && languageCode && modelType 
+            ? `Language: ${languageCode} | Model: ${modelType} | Voice: ${voiceName.split('-').pop()}`
+            : voiceName || 'Default Voice';
+            
         audioControls = `
             <div class="voice-indicator">
                 <i class="fas fa-microphone-alt"></i>
-                <span>Voice: ${voiceName}</span>
+                <span>${voiceInfo}</span>
             </div>
             <div class="audio-controls-inline">
                 <button class="audio-btn" onclick="playInlineAudio('${audioUrl}')">
@@ -309,30 +522,42 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!document.getElementById('conversationId').value) {
         document.getElementById('conversationId').value = `conv-${Math.random().toString(36).substr(2, 9)}`;
     }
-    
-    // Add voice selector change listener
-    const voiceSelect = document.getElementById('voiceSelect');
-    voiceSelect.addEventListener('change', function() {
-        const selectedVoice = this.value;
-        const voiceName = this.options[this.selectedIndex].text;
-        console.log(`🎤 Voice changed to: ${selectedVoice}`);
-        showNotification(`Giọng nói đã được chọn: ${voiceName}`, 'info');
-    });
-    
-    // Show initial voice
-    const initialVoice = voiceSelect.options[voiceSelect.selectedIndex].text;
-    console.log(`🎤 Initial voice: ${initialVoice}`);
 });
 
 // Debug function for testing - can be called from browser console
 window.testVoiceSelection = function() {
+    const languageSelect = document.getElementById('languageSelect');
+    const modelSelect = document.getElementById('modelSelect');
     const voiceSelect = document.getElementById('voiceSelect');
+    
     console.log('=== Voice Selection Debug ===');
-    console.log('Selected index:', voiceSelect.selectedIndex);
-    console.log('Selected value:', voiceSelect.value);
-    console.log('Selected text:', voiceSelect.options[voiceSelect.selectedIndex].text);
-    console.log('All options:', Array.from(voiceSelect.options).map(opt => ({ value: opt.value, text: opt.text })));
-    return voiceSelect.value;
+    console.log('Language:', {
+        index: languageSelect.selectedIndex,
+        value: languageSelect.value,
+        text: languageSelect.options[languageSelect.selectedIndex]?.text
+    });
+    console.log('Model:', {
+        index: modelSelect.selectedIndex,
+        value: modelSelect.value,
+        text: modelSelect.options[modelSelect.selectedIndex]?.text
+    });
+    console.log('Voice:', {
+        index: voiceSelect.selectedIndex,
+        value: voiceSelect.value,
+        text: voiceSelect.options[voiceSelect.selectedIndex]?.text
+    });
+    console.log('Current Selection:', {
+        language: currentLanguage,
+        model: currentModel,
+        voice: currentVoice
+    });
+    console.log('Voices Data:', voicesData);
+    
+    return {
+        language: currentLanguage,
+        model: currentModel,
+        voice: currentVoice
+    };
 };
 
 console.log('✅ Voice debug function loaded. Type testVoiceSelection() in console to debug.');
