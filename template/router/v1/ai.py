@@ -1,13 +1,14 @@
-from typing import Union
+from typing import Optional, Union
 import logging
 import json
 import os
 import io
 import tempfile
 from datetime import datetime
-from fastapi import APIRouter, Depends, BackgroundTasks, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, BackgroundTasks, File, UploadFile, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from cachetools import TTLCache
+from pydantic import Field
 import requests
 import httpx
 import aiofiles
@@ -227,17 +228,19 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
 
 @AiRouter.post("/chat/audio")
 async def chat_audio(
-    sessionId: str,
-    conversationId: str,
-    token: str,
-    voice: str = "vi-VN-Neural2-A",
-    audio_file: UploadFile = File(...),
+    sessionId: str = Query(..., description="Unique identifier for the user session"),
+    conversationId: str = Query(..., description="Unique identifier for the conversation"),
+    token: str = Query(..., description="Authentication token"),
+    voice: Optional[str] = Query("vi-VN-Neural2-A", description="Voice to use for text-to-speech (e.g., 'vi-VN-Neural2-A', 'en-US-Neural2-C')"),
+    language_code: Optional[str] = Query("vi-VN", description="Language code for AI response (e.g., 'en-US', 'vi-VN')"),
+    audio_file: UploadFile = File(..., description="Audio file to transcribe (wav, mp3, webm, ogg)"),
     background_tasks: BackgroundTasks = None
 ):
     """Process an audio chat message and return response with both text and audio"""
     try:
         logger.info(f'🎵 Audio chat - sessionId: {sessionId} | file: {audio_file.filename}')
         logger.info(f'🎙️  Using voice: {voice}')
+
         
         # Validate audio file
         if not audio_file.content_type.startswith('audio/'):
@@ -247,8 +250,12 @@ async def chat_audio(
         transcribed_text = await speech_to_text(audio_file)
         logger.info(f'📝 Transcribed text: {transcribed_text}')
         
-        if not transcribed_text.strip():
-            raise HTTPException(status_code=400, detail="Could not transcribe audio")
+        if not transcribed_text or not transcribed_text.strip():
+            logger.warning(f"⚠️ Empty transcription for file: {audio_file.filename}")
+            raise HTTPException(
+                status_code=400, 
+                detail="Could not transcribe audio. Please make sure the audio is clear and contains speech."
+            )
         
         # Process the transcribed text through the chatbot
         agent = ManagerAgent(
@@ -256,7 +263,8 @@ async def chat_audio(
             model=env.MANAGER_MODEL_NAME,
             verbose=True,
             session_id=sessionId,
-            conversation_id=conversationId
+            conversation_id=conversationId,
+            language_code=language_code  # Pass language_code to agent
         )
 
         # Check if this is a plan selection and retrieve cached plan options
@@ -291,7 +299,6 @@ async def chat_audio(
         
         # Use voice parameter with default language code
         voice_name = voice
-        language_code = "vi-VN"  # Default to Vietnamese
         await text_to_speech_with_voice(response_text, temp_audio_path, voice_name, language_code)
         # audio_content = await text_to_speech(response_text)
         

@@ -102,13 +102,15 @@ class ManagerAgent(BaseAgent):
         if llm:
             self.llm = llm
         else:
-            self.llm = ChatVertexAI(
+            # Create base LLM without tools first
+            base_llm = ChatVertexAI(
                 model_name=model,
-                tools = self.tools,
                 temperature=temperature,
                 project=env.GOOGLE_CLOUD_PROJECT,
                 location=env.GOOGLE_CLOUD_LOCATION
             )
+            # Bind tools to LLM using the proper method
+            self.llm = base_llm.bind_tools(self.tools)
         
         self.max_iteration = max_iteration
         self.verbose = verbose

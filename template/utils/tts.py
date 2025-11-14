@@ -125,37 +125,83 @@ async def speech_to_text(audio_file: UploadFile) -> str:
     """Convert speech to text using Google Cloud Speech-to-Text (optimized)"""
     temp_file_path = None
     try:
-        # Lưu file tạm thời (tối ưu hóa)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        # Determine file extension from content type or filename
+        content_type = audio_file.content_type or ""
+        filename = audio_file.filename or ""
+        
+        # Determine appropriate file extension
+        if "webm" in content_type or filename.endswith(".webm"):
+            suffix = ".webm"
+        elif "mp3" in content_type or filename.endswith(".mp3"):
+            suffix = ".mp3"
+        elif "wav" in content_type or filename.endswith(".wav"):
+            suffix = ".wav"
+        elif "ogg" in content_type or filename.endswith(".ogg"):
+            suffix = ".ogg"
+        else:
+            # Default to webm as it's common for browser recordings
+            suffix = ".webm"
+            logger.warning(f"⚠️ Unknown audio format: {content_type} / {filename}, defaulting to .webm")
+        
+        # Save temporary file with correct extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             content = await audio_file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
 
-        # Detect sample rate nhanh
-        sample_rate = get_wav_sample_rate(temp_file_path) if temp_file_path.endswith(".wav") else 16000
+        logger.info(f"🎵 Processing audio file: {temp_file_path} (original: {filename})")
+
+        # Detect sample rate and encoding based on file type
+        if suffix == ".wav":
+            sample_rate = get_wav_sample_rate(temp_file_path)
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        elif suffix == ".mp3":
+            sample_rate = 48000  # Common for MP3
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        elif suffix == ".webm" or suffix == ".ogg":
+            sample_rate = 48000  # Common for WebM/Ogg
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        else:
+            sample_rate = 16000
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
         
-        # Đọc file
+        # Read file content
         with open(temp_file_path, "rb") as f:
             content = f.read()
 
-        # Sử dụng reusable client
+        # Check if content is not empty
+        if len(content) == 0:
+            logger.error("❌ Audio file is empty (0 bytes)")
+            return ""
+
+        logger.info(f"📊 Audio size: {len(content)} bytes, sample_rate: {sample_rate}, encoding: {encoding}")
+
+        # Use reusable client
         client = get_stt_client()
         audio = speech.RecognitionAudio(content=content)
         config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16
-            if temp_file_path.endswith(".wav")
-            else speech.RecognitionConfig.AudioEncoding.MP3,
+            encoding=encoding,
             sample_rate_hertz=sample_rate,
             language_code="vi-VN",
             enable_automatic_punctuation=True,
-            use_enhanced=True,  # Sử dụng model tốt hơn
-            model="latest_short",  # Model tối ưu cho audio ngắn
+            use_enhanced=True,  # Use better model
+            model="latest_short",  # Optimized for short audio
         )
 
         response = client.recognize(config=config, audio=audio)
+        
+        # Check if we got any results
+        if not response.results:
+            logger.warning(colored("⚠️ STT returned no results - audio may be silent or unrecognizable", "yellow"))
+            return ""
+        
         result = " ".join([r.alternatives[0].transcript for r in response.results])
 
-        logger.info(colored(f"📝 STT result: {result[:100]}...", "green"))
+        if result.strip():
+            logger.info(colored(f"📝 STT result: {result[:100]}...", "green"))
+        else:
+            logger.warning(colored("⚠️ STT result is empty after transcription", "yellow"))
+        
         return result
 
     except Exception as e:
