@@ -1,5 +1,7 @@
 from functools import lru_cache
 import os
+from typing import Optional
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -61,6 +63,13 @@ class EnvironmentSettings(BaseSettings):
     GOOGLE_API_KEY: str
     # Open WeatherMap API settings
     OPEN_WEATHER_API_KEY: str
+    # AWS S3 settings - Support both naming conventions
+    AWS_ACCESS_KEY_ID: str
+    AWS_ACCESS_KEY_SECRET: Optional[str] = None  # Old name
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None  # Standard AWS name
+    AWS_S3_REGION: str
+    AWS_S3_BUCKET: str
+
     # Debug settings
     MCP_SERVER_URL: str
     MAX_ITERATIONS: int = 10
@@ -69,6 +78,16 @@ class EnvironmentSettings(BaseSettings):
     DEBUG_MODE: bool = False
 
     model_config = SettingsConfigDict(env_file=get_env_filename(), env_file_encoding="utf-8")
+    
+    @field_validator('AWS_SECRET_ACCESS_KEY')
+    @classmethod
+    def validate_aws_secret_key(cls, v, info):
+        # If AWS_SECRET_ACCESS_KEY is not provided, use AWS_ACCESS_KEY_SECRET
+        if not v and info.data.get('AWS_ACCESS_KEY_SECRET'):
+            return info.data['AWS_ACCESS_KEY_SECRET']
+        if not v:
+            raise ValueError('Either AWS_SECRET_ACCESS_KEY or AWS_ACCESS_KEY_SECRET must be provided')
+        return v
 
 
 @lru_cache

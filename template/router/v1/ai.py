@@ -33,6 +33,7 @@ from template.schemas.model import (
     PlanSelectionRequest
 )
 from template.utils.tts import text_to_speech_with_voice, speech_to_text
+from template.utils.aws_transcribe_service import AWSTranscribeService
 
 from gtts import gTTS
 from pydub import AudioSegment
@@ -162,27 +163,26 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         
         # Generate audio file from response text
         try:
-
             # Save audio file temporarily
             audio_filename = f"response_{request.sessionId}_{request.conversationId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
             temp_audio_path = f"/tmp/{audio_filename}"
             await text_to_speech_with_voice(response_text, temp_audio_path, voice_name, language_code)
-            # audio_content = await text_to_speech(response_text)
             
+            # Upload audio to S3 and get public URL
+            logger.info(f"📤 Uploading audio to S3: {audio_filename}")
+            s3_service = AWSTranscribeService()
+            audio_url = s3_service.upload_to_s3(temp_audio_path)
+            logger.info(f"✅ Audio uploaded to S3: {audio_url}")
             
-            # with open(temp_audio_path, 'wb') as f:
-            #     f.write(audio_content)
+            # Schedule cleanup of temporary file
+            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=60)  # 1 minute
             
             # Add audio file info to response
             response_with_audio = ChatResponse(
                 sessionId=request.sessionId,
                 response=response_text,
-                # error_status="success" if response.get('success', True) else "error",
-                audio_file_url=f"/ai/download/audio/{audio_filename}"
+                audio_file_url=audio_url
             )
-            
-            # Schedule cleanup of temporary file after some time
-            # background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600000)  # 1 hour
             
             return response_with_audio
             
@@ -300,21 +300,23 @@ async def chat_audio(
         # Use voice parameter with default language code
         voice_name = voice
         await text_to_speech_with_voice(response_text, temp_audio_path, voice_name, language_code)
-        # audio_content = await text_to_speech(response_text)
         
-        # with open(temp_audio_path, 'wb') as f:
-        #     f.write(audio_content)
+        # Upload audio to S3 and get public URL
+        logger.info(f"📤 Uploading audio to S3: {audio_filename}")
+        s3_service = AWSTranscribeService()
+        audio_url = s3_service.upload_to_s3(temp_audio_path)
+        logger.info(f"✅ Audio uploaded to S3: {audio_url}")
         
-        # Schedule cleanup of temporary file after some time
+        # Schedule cleanup of temporary file
         if background_tasks:
-            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=3600)  # 1 hour
+            background_tasks.add_task(cleanup_temp_file, temp_audio_path, delay=60)  # 1 minute
         
         return {
             "sessionId": sessionId,
             "transcribed_text": transcribed_text,
             "response": response_text,
             "error_status": "success" if response.get('success', True) else "error",
-            "audio_file_url": f"/ai/download/audio/{audio_filename}"
+            "audio_file_url": audio_url
         }
         
     except HTTPException:
@@ -325,19 +327,6 @@ async def chat_audio(
             status_code=500,
             detail="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại."
         )
-
-@AiRouter.get("/download/audio/{filename}")
-async def download_audio(filename: str):
-    """Download generated audio file"""
-    file_path = f"/tmp/{filename}"
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type="audio/wav"
-    )
 
 async def cleanup_temp_file(file_path: str, delay: int = 0):
     """Clean up temporary files after a delay"""
