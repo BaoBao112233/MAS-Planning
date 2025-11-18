@@ -47,6 +47,7 @@ class EnvironmentSettings(BaseSettings):
     PLAN_API_BASE_URL: str
     PLAN_API_KEY: str
     OXII_ROOT_API_URL: str
+    OXII_API_KEY: str = None
     # ElevenLabs API settings
     ELEVENLABS_BASE_URL: str
     ELEVENLABS_API_KEY: str

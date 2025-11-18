@@ -1,7 +1,7 @@
 """
 Optimized Plan Agent for MAS-Planning system
 Clear workflow (PlanAgent assumes analysis is provided by Manager):
-1. Call get_device_list tool to get device information
+1. Call get_device_list directly (NO MCP) to get device information
 2. Create 2 priority plans (Optimized, Conservative)
 3. Execute selected plan with status updates
 """
@@ -23,12 +23,13 @@ from template.agent.plan.prompts import (
     UPDATE_PLAN_PROMPTS
 )
 from template.agent.tool import ToolAgent
-# from template.agent.api_client import APIClient
 from template.configs.environments import env
+
+# Import get_device_list directly
+from template.api_things.info_devices import get_device_list
 
 from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import StateGraph, END, START
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from termcolor import colored
 import time
 import asyncio
@@ -56,9 +57,8 @@ class PlanAgent(BaseAgent):
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
-        self.tools = []
+        self.tools = []  # No tools needed for PlanAgent
         self.tools_dict = {}
-        self.mcp_client = None
         
         # Initialize LLM
         logger.info(colored(f"Plan Agent using model: {model}", "green", attrs=["bold"]))
@@ -73,7 +73,7 @@ class PlanAgent(BaseAgent):
                 location=env.GOOGLE_CLOUD_LOCATION
             )
             
-            # LLM with tools will be set in init_async()
+            # LLM is just base LLM (no tools)
             self.llm = self.base_llm
             
             logger.info(f"✅ LLM initialized successfully")
@@ -84,7 +84,6 @@ class PlanAgent(BaseAgent):
 
         self.max_iteration = max_iteration
         self.verbose = verbose
-        # self.api_client = APIClient()
         self.tool_agent = None
         
         # Parallel execution optimizer
@@ -94,60 +93,9 @@ class PlanAgent(BaseAgent):
         # Initialize graph
         self.graph = self.create_graph()
 
-        # Initialize MCP tools asynchronously
-        try:
-            import threading
-            
-            def run_init():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(self.init_async())
-                    logger.info("📋 PlanAgent MCP tools initialized")
-                except Exception as e:
-                    logger.warning(colored(f"⚠️ PlanAgent MCP init failed: {e}", 'yellow'))
-                finally:
-                    loop.close()
-            
-            thread = threading.Thread(target=run_init)
-            thread.start()
-            thread.join(timeout=10)
-            
-            if thread.is_alive():
-                logger.warning(colored("⚠️ PlanAgent MCP init timeout", 'yellow'))
-                
-        except Exception as e:
-            logger.warning(colored(f"⚠️ Could not init PlanAgent MCP: {e}", 'yellow'))
-
     async def init_async(self):
-        """Initialize MCP client and load tools"""
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-        except ImportError:
-            logger.warning("nest_asyncio not installed")
-        
-        try:
-            self.mcp_client = MultiServerMCPClient(
-                {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
-            )
-            await self.mcp_client.__aenter__()
-            
-            # Get tools
-            self.tools = list(self.mcp_client.get_tools())
-            self.tools_dict = {tool.name: tool for tool in self.tools}
-            
-            # Bind tools to LLM for tool-based workflows (NOT for plan generation)
-            if self.tools:
-                self.llm = self.base_llm.bind_tools(self.tools)
-            else:
-                self.llm = self.base_llm
-
-            if self.verbose:
-                logger.info(colored(f"🔧 Loaded {len(self.tools)} MCP tools", "green", attrs=["bold"]))
-                
-        except Exception as e:
-            logger.error(f"❌ Error initializing MCP client: {str(e)}")
+        """Compatibility method - no longer needed but kept for backward compatibility"""
+        pass
     
     def router(self, state: PlanState):
         """Route based on input and state"""
@@ -301,64 +249,21 @@ class PlanAgent(BaseAgent):
             }
 
     def _get_device_list(self, token: str) -> dict:
-        """Call get_device_list tool to retrieve device information"""
+        """Call get_device_list directly from api_things (NO MCP)"""
         try:
-            logger.info(colored("📡 Calling get_device_list tool...", "green", attrs=['bold']))
+            logger.info(colored("📡 Calling get_device_list directly...", "green", attrs=['bold']))
             
-            # Create fresh MCP client for this call (like ToolAgent does)
-            import concurrent.futures
+            # Set token in env for api_things to use
+            env.OXII_API_KEY = token
             
-            def run_tool_call():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Create fresh client
-                    temp_client = MultiServerMCPClient(
-                        {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
-                    )
-                    loop.run_until_complete(temp_client.__aenter__())
-                    
-                    # Get tools
-                    temp_tools = list(temp_client.get_tools())
-                    temp_tools_dict = {t.name: t for t in temp_tools}
-                    
-                    if 'get_device_list' not in temp_tools_dict:
-                        logger.warning("⚠️ get_device_list tool not available in fresh client")
-                        return None
-                    
-                    get_device_list_tool = temp_tools_dict['get_device_list']
-                    
-                    # Call tool
-                    result = loop.run_until_complete(
-                        asyncio.wait_for(
-                            get_device_list_tool.ainvoke({"token": token}),
-                            timeout=15.0
-                        )
-                    )
-                    
-                    return result
-                    
-                finally:
-                    # Cleanup
-                    if 'temp_client' in locals():
-                        try:
-                            loop.run_until_complete(temp_client.__aexit__(None, None, None))
-                        except:
-                            pass
-                    loop.close()
-            
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_tool_call)
-                result = future.result(timeout=20)
+            # Call get_device_list directly
+            result = asyncio.run(get_device_list())
             
             if self.verbose and result:
                 logger.info(f"📱 Device data retrieved: {len(str(result))} characters")
             
             return result
             
-        except concurrent.futures.TimeoutError:
-            logger.warning("⚠️ get_device_list timeout after 20 seconds")
-            return None
         except Exception as e:
             logger.error(f"❌ Error calling get_device_list: {str(e)}")
             return None

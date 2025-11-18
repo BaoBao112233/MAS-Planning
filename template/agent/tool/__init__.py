@@ -1,6 +1,6 @@
 """
-Tool Agent for MAS-Planning system using MCP tools
-Enhanced version: fully async with proper event loop handling
+Tool Agent for MAS-Planning system using direct API calls
+No MCP dependency - calls api_things functions directly
 """
 import logging
 import asyncio
@@ -9,12 +9,24 @@ from typing import Dict, Any, TypedDict, List, Optional, Callable
 from termcolor import colored
 from langgraph.graph import StateGraph, END
 from langchain_google_vertexai import ChatVertexAI
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.messages import AIMessage, HumanMessage as LCHumanMessage
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 from template.configs.environments import env
 from template.message.message import HumanMessage, SystemMessage
 from template.message.converter import convert_messages_list
 from template.agent.tool.prompt import TOOL_PROMPT
+
+# Import api_things functions directly
+from template.api_things.info_devices import get_device_list, get_device_info
+from template.api_things.switch_devices import (
+    switch_on_off_controls_v2,
+    switch_on_off_all_device,
+    switch_device_by_type,
+    room_one_touch_control
+)
+from template.api_things.ac_devices import ac_controls_mesh_v2
+from template.api_things.cronjob_devices import cronjob_device_v2
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +36,6 @@ logger = logging.getLogger(__name__)
 # =======================
 class ToolState(TypedDict):
     input: str
-    token: str
     messages: List[Any]
     tool_calls: List[Dict[str, Any]]
     tool_results: List[Dict[str, Any]]
@@ -32,6 +43,47 @@ class ToolState(TypedDict):
     error: str
     iteration: int
     max_iterations: int
+
+
+# =======================
+#   Pydantic schemas for tools
+# =======================
+class GetDeviceListInput(BaseModel):
+    """No parameters needed"""
+    pass
+
+class SwitchOnOffControlsV2Input(BaseModel):
+    buttonId: int = Field(description="ID of the button to control")
+    data: int = Field(description="State to set (0 for off, 1 for on)")
+
+class ACControlsMeshV2Input(BaseModel):
+    buttonId: int = Field(description="ID of the remote button")
+    power: str = Field(description="Power state: '1'/'on' for ON, '0'/'off' for OFF")
+    mode: str = Field(default='1', description="AC mode: '1'/'auto', '2'/'heat', '3'/'cool', '4'/'dry', '5'/'fan'")
+    temp: str = Field(default='24', description="Target temperature (16-32)")
+    fan_speed: str = Field(default='0', description="Fan speed: '0'/'auto', '1'/'low', '2'/'medium', '3'/'high'")
+    swing_h: str = Field(default='0', description="Horizontal swing: '1'/'on', '0'/'off'")
+    swing_v: str = Field(default='0', description="Vertical swing: '1'/'on', '0'/'off'")
+
+class CronjobDeviceV2Input(BaseModel):
+    buttonId: int = Field(description="ID of the remotebutton")
+    action: int = Field(description="Action: 1 for add/update, 3 for delete")
+    job_status: int = Field(description="Job status: 0 for inactive, 1 for active")
+    cron_time: str = Field(description="Cron expression: '* * * * * *' (second minute hour day month day_of_week)")
+    button_code: str = Field(description="Button code: button01, button02, button03, button04")
+    command: str = Field(description="Command: on, off, up, down, volume")
+    issetting_online: bool = Field(description="Apply setting online")
+
+class RoomOneTouchControlInput(BaseModel):
+    room_id: str = Field(description="ID of the room")
+    one_touch_code: str = Field(description="One-touch code: TURN_ON_ALL_DEVICES, TURN_OFF_ALL_DEVICES, TURN_ON_LIGHT, etc.")
+
+class SwitchOnOffAllDeviceInput(BaseModel):
+    command: str = Field(description="Command: on or off")
+
+class SwitchDeviceByTypeInput(BaseModel):
+    device_type: str = Field(description="Device type: LIGHT, TV, CONDITIONER, FAN, HOT_COLD_SHOWER, SOCKET")
+    action: str = Field(description="Action: ON or OFF")
 
 
 # =======================
@@ -68,7 +120,7 @@ class AsyncGraphExecutor:
 #   Tool Agent Class
 # =======================
 class ToolAgent:
-    """Tool Agent sử dụng MCP để thực hiện smart home automation tasks với reasoning tự động"""
+    """Tool Agent using direct API calls to api_things functions (NO MCP)"""
 
     def __init__(self, model="gemini-2.5-flash", temperature=0.2, verbose=False, max_iterations=5):
         self.name = "Tool Agent"
@@ -77,34 +129,78 @@ class ToolAgent:
         self.verbose = verbose
         self.max_iterations = max_iterations
         self.tools = []
-        self.tools_dict = {}  # Map tool names to tool objects
+        self.tools_dict = {}
         self.llm = None
-        self.mcp_client = None
         self._graph = None
         self._executor = AsyncGraphExecutor(self)
+        
+        # Initialize tools immediately (no async needed)
+        self._init_tools()
+        self._init_llm()
 
-    # ==========================================================
-    # Init MCP tools + Vertex LLM
-    # ==========================================================
-    async def init_async(self):
-        """Load MCP tools and initialize Vertex LLM with persistent client"""
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-        except ImportError:
-            logger.warning(colored("nest_asyncio not installed. May have issues in nested event loops.", "yellow", attrs=["bold"]))
+    def _init_tools(self):
+        """Initialize tools as LangChain StructuredTools wrapping api_things functions"""
+        # Note: Tool execution IGNORES IR devices and related functions
         
-        self.mcp_client = MultiServerMCPClient(
-            {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
-        )
-        await self.mcp_client.__aenter__()
+        self.tools = [
+            StructuredTool(
+                name="get_device_list",
+                description="Get status of all devices in the house. Returns list of rooms with devices and their current states. Use this first before any control operation.",
+                func=self._sync_get_device_list,
+                coroutine=self._async_get_device_list,
+                args_schema=GetDeviceListInput
+            ),
+            StructuredTool(
+                name="switch_on_off_controls_v2",
+                description="Control on/off state of a switch device (LIGHT, FAN, TV, SOCKET, etc). Requires buttonId and data (0=off, 1=on). DO NOT use for IR-controlled devices.",
+                func=self._sync_switch_on_off_controls_v2,
+                coroutine=self._async_switch_on_off_controls_v2,
+                args_schema=SwitchOnOffControlsV2Input
+            ),
+            StructuredTool(
+                name="ac_controls_mesh_v2",
+                description="Control air conditioner via BLE mesh. Requires buttonId, power, and optionally mode, temp, fan_speed, swing settings. DO NOT use for IR AC devices.",
+                func=self._sync_ac_controls_mesh_v2,
+                coroutine=self._async_ac_controls_mesh_v2,
+                args_schema=ACControlsMeshV2Input
+            ),
+            StructuredTool(
+                name="cronjob_device_v2",
+                description="Create or update cronjob schedule for a device. Requires buttonId, action (1=add, 3=delete), job_status, cron_time, button_code, command. DO NOT use for IR devices.",
+                func=self._sync_cronjob_device_v2,
+                coroutine=self._async_cronjob_device_v2,
+                args_schema=CronjobDeviceV2Input
+            ),
+            StructuredTool(
+                name="room_one_touch_control",
+                description="Execute room-level one-touch control (turn on/off all devices, lights, fans in a specific room). Requires room_id and one_touch_code.",
+                func=self._sync_room_one_touch_control,
+                coroutine=self._async_room_one_touch_control,
+                args_schema=RoomOneTouchControlInput
+            ),
+            StructuredTool(
+                name="switch_on_off_all_device",
+                description="Turn on/off ALL devices in the entire house using one-touch control. Requires command (on/off).",
+                func=self._sync_switch_on_off_all_device,
+                coroutine=self._async_switch_on_off_all_device,
+                args_schema=SwitchOnOffAllDeviceInput
+            ),
+            StructuredTool(
+                name="switch_device_by_type",
+                description="Turn on/off devices by type across the house (LIGHT, TV, FAN, etc). Requires device_type and action (ON/OFF).",
+                func=self._sync_switch_device_by_type,
+                coroutine=self._async_switch_device_by_type,
+                args_schema=SwitchDeviceByTypeInput
+            )
+        ]
         
-        # Get tools (these are already LangChain tools)
-        self.tools = list(self.mcp_client.get_tools())
-        
-        # Create tool lookup dictionary
         self.tools_dict = {tool.name: tool for tool in self.tools}
+        
+        if self.verbose:
+            logger.info(colored(f"🔧 Initialized {len(self.tools)} direct API tools", "green", attrs=["bold"]))
 
+    def _init_llm(self):
+        """Initialize Vertex LLM with tools"""
         logger.info(colored(f"Tool Agent using model: {self.model}", "green", attrs=["bold"]))
 
         base_llm = ChatVertexAI(
@@ -119,15 +215,70 @@ class ToolAgent:
         else:
             self.llm = base_llm
 
-        if self.verbose:
-            logger.info(colored(f"🔧 Loaded {len(self.tools)} MCP tools", "green", attrs=["bold"]))
-            # for t in self.tools:
-            #     logger.info(colored(f"🔹 {t.name} - {getattr(t, 'description', '')}"), "green", attrs=["bold"])
+    # ==========================================================
+    # Wrapper functions for api_things (sync versions for StructuredTool.func)
+    # ==========================================================
+    def _sync_get_device_list(self) -> str:
+        return asyncio.run(get_device_list())
+    
+    def _sync_switch_on_off_controls_v2(self, buttonId: int, data: int) -> str:
+        return asyncio.run(switch_on_off_controls_v2(buttonId, data))
+    
+    def _sync_ac_controls_mesh_v2(self, buttonId: int, power: str, mode: str = '1', 
+                                   temp: str = '24', fan_speed: str = '0', 
+                                   swing_h: str = '0', swing_v: str = '0') -> str:
+        return asyncio.run(ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v))
+    
+    def _sync_cronjob_device_v2(self, buttonId: int, action: int, job_status: int, 
+                                 cron_time: str, button_code: str, command: str, 
+                                 issetting_online: bool) -> str:
+        return asyncio.run(cronjob_device_v2(buttonId, action, job_status, cron_time, 
+                                               button_code, command, issetting_online))
+    
+    def _sync_room_one_touch_control(self, room_id: str, one_touch_code: str) -> str:
+        return asyncio.run(room_one_touch_control(room_id, one_touch_code))
+    
+    def _sync_switch_on_off_all_device(self, command: str) -> str:
+        return asyncio.run(switch_on_off_all_device(command))
+    
+    def _sync_switch_device_by_type(self, device_type: str, action: str) -> str:
+        return asyncio.run(switch_device_by_type(device_type, action))
+    
+    # Async versions for StructuredTool.coroutine
+    async def _async_get_device_list(self) -> str:
+        return await get_device_list()
+    
+    async def _async_switch_on_off_controls_v2(self, buttonId: int, data: int) -> str:
+        return await switch_on_off_controls_v2(buttonId, data)
+    
+    async def _async_ac_controls_mesh_v2(self, buttonId: int, power: str, mode: str = '1',
+                                          temp: str = '24', fan_speed: str = '0',
+                                          swing_h: str = '0', swing_v: str = '0') -> str:
+        return await ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v)
+    
+    async def _async_cronjob_device_v2(self, buttonId: int, action: int, job_status: int,
+                                        cron_time: str, button_code: str, command: str,
+                                        issetting_online: bool) -> str:
+        result = await cronjob_device_v2(buttonId, action, job_status, cron_time,
+                                           button_code, command, issetting_online)
+        return json.dumps(result) if isinstance(result, dict) else str(result)
+    
+    async def _async_room_one_touch_control(self, room_id: str, one_touch_code: str) -> str:
+        return await room_one_touch_control(room_id, one_touch_code)
+    
+    async def _async_switch_on_off_all_device(self, command: str) -> str:
+        return await switch_on_off_all_device(command)
+    
+    async def _async_switch_device_by_type(self, device_type: str, action: str) -> str:
+        return await switch_device_by_type(device_type, action)
+
+    async def init_async(self):
+        """Compatibility method - no longer needed but kept for backward compatibility"""
+        pass
 
     async def cleanup(self):
-        """Cleanup MCP client connection"""
-        if self.mcp_client:
-            await self.mcp_client.__aexit__(None, None, None)
+        """Compatibility method - no cleanup needed without MCP"""
+        pass
 
     # ==========================================================
     # Core Async Logic
@@ -191,7 +342,7 @@ class ToolAgent:
 
 
     async def execute_tools_parallel(self, state: ToolState) -> ToolState:
-        """Execute multiple tool calls with smart parallel/sequential logic"""
+        """Execute multiple tool calls with smart parallel/sequential logic - direct API calls"""
         if self.verbose:
             logger.info(colored(f"\n{'='*50}\n⚙️ EXECUTION PHASE\n{'='*50}", "green", attrs=["bold"]))
         
@@ -210,14 +361,14 @@ class ToolAgent:
                     logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
 
             parallel_results = await asyncio.gather(
-                *[self._execute_single_tool(tc, state["token"]) for tc in independent_calls],
+                *[self._execute_single_tool(tc) for tc in independent_calls],
                 return_exceptions=True
             )
             results.extend(parallel_results)
         
         # PHASE 2: Execute dependent tools
         if dependent_calls:
-            prerequisite_tools = {"get_device_list", "retrieve_ir_data_v2", "retrieve_ir_data"}
+            prerequisite_tools = {"get_device_list"}
             prereqs = [tc for tc in dependent_calls if tc["name"] in prerequisite_tools]
             controls = [tc for tc in dependent_calls if tc["name"] not in prerequisite_tools]
             
@@ -227,7 +378,7 @@ class ToolAgent:
                 for tc in prereqs:
                     if self.verbose:
                         logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
-                    result = await self._execute_single_tool(tc, state["token"])
+                    result = await self._execute_single_tool(tc)
                     results.append(result)
             
             if controls:
@@ -235,7 +386,7 @@ class ToolAgent:
                     if self.verbose:
                         logger.info(colored(f"⚙️ Phase 2b: Executing 1 control tool", "green", attrs=["bold"]))
                         logger.info(colored(f"   → {controls[0]['name']}", "green", attrs=["bold"]))
-                    result = await self._execute_single_tool(controls[0], state["token"])
+                    result = await self._execute_single_tool(controls[0])
                     results.append(result)
                 else:
                     if self.verbose:
@@ -244,7 +395,7 @@ class ToolAgent:
                             logger.info(colored(f"   → {tc['name']}", "green", attrs=["bold"]))
 
                     parallel_controls = await asyncio.gather(
-                        *[self._execute_single_tool(tc, state["token"]) for tc in controls],
+                        *[self._execute_single_tool(tc) for tc in controls],
                         return_exceptions=True
                     )
                     results.extend(parallel_controls)
@@ -288,24 +439,16 @@ class ToolAgent:
         return state
 
     def _categorize_tool_calls(self, tool_calls: List[Dict]) -> tuple:
-        """Phân loại tool calls: độc lập vs phụ thuộc based on 13 OXII tools"""
+        """Categorize tool calls: independent vs dependent (NO IR tools)"""
         independent = []
         dependent = []
         
-        prerequisite_tools = {
-            "get_device_list",
-            "retrieve_ir_data_v2", 
-            "retrieve_ir_data"
-        }
+        prerequisite_tools = {"get_device_list"}
         
         dependent_tools = {
             "switch_on_off_controls_v2",
             "ac_controls_mesh_v2",
-            "ac_controls_mesh",
-            "open_ir_send_for_testing_mesh_v2",
-            "open_ir_send_for_testing_mesh",
             "cronjob_device_v2",
-            "cronjob_device",
             "room_one_touch_control"
         }
         
@@ -329,44 +472,30 @@ class ToolAgent:
                 else:
                     independent.append(tc)
             else:
+                # Unknown tool - treat as dependent for safety
                 dependent.append(tc)
         
         return independent, dependent
 
-    async def _execute_single_tool(self, tool_call: Dict, token: str) -> Dict:
-        """Execute a single tool call using fresh MCP client per call"""
-        temp_client = None
+    async def _execute_single_tool(self, tool_call: Dict) -> Dict:
+        """Execute a single tool call using direct API functions (NO MCP)"""
         try:
             tool_name = tool_call["name"]
             tool_args = tool_call.get("args", {})
             tool_id = tool_call.get("id", "")
             
-            # ✅ Inject token into args
-            tool_args["token"] = token
-            
             if self.verbose:
                 logger.info(colored(f"🔧 Calling {tool_name} with args: {tool_args}", "green", attrs=["bold"]))
             
-            # ✅ FIX: Create fresh MCP client for each tool call
-            # This avoids SSE connection deadlock in nested async contexts
-            logger.info(colored(f"⏳ Creating fresh MCP client for {tool_name}...", "green", attrs=["bold"]))
-
-            temp_client = MultiServerMCPClient(
-                {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
-            )
-            
-            # Enter context and get tools
-            await temp_client.__aenter__()
-            temp_tools = list(temp_client.get_tools())
-            temp_tools_dict = {t.name: t for t in temp_tools}
-            
-            # Get the tool
-            tool = temp_tools_dict.get(tool_name)
+            # Get tool from tools_dict
+            tool = self.tools_dict.get(tool_name)
             if not tool:
                 raise ValueError(f"Tool '{tool_name}' not found in available tools")
             
+            # Call tool directly (uses coroutine if available)
+            logger.info(colored(f"⏳ Invoking {tool_name} directly...", "green", attrs=["bold"]))
+            
             # Call tool with timeout
-            logger.info(colored(f"⏳ Invoking {tool_name}...", "green", attrs=["bold"]))
             result = await asyncio.wait_for(
                 tool.ainvoke(tool_args),
                 timeout=60.0  # 60 seconds timeout
@@ -399,15 +528,6 @@ class ToolAgent:
                 "content": {"error": str(e)},
                 "success": False
             }
-            
-        finally:
-            # Always cleanup temp client
-            if temp_client:
-                try:
-                    await temp_client.__aexit__(None, None, None)
-                    logger.info(colored(f"🧹 Cleaned up MCP client for {tool_call.get('name', 'unknown')}", "green", attrs=["bold"]))
-                except Exception as cleanup_error:
-                    logger.warning(colored(f"⚠️ Error cleaning up MCP client: {cleanup_error}", "yellow", attrs=["bold"]))
 
     # ==========================================================
     # Router Logic
@@ -477,13 +597,17 @@ class ToolAgent:
     # Public Interface
     # ==========================================================
     async def ainvoke(self, input_data, **kwargs):
-        """Async entry point for agent invocation"""
-        token = kwargs.get("token", "") or input_data.get("token", "")
+        """Async entry point for agent invocation - token no longer used in tool calls"""
         query = input_data["input"] if isinstance(input_data, dict) else input_data
+        token = kwargs.get("token", "") or input_data.get("token", "")
+        
+        # Store token in env for api_things functions to use
+        if token:
+            env.OXII_API_KEY = token
         
         initial_state: ToolState = {
             "input": query,
-            "token": token,
+            "token": token,  # Keep for backward compatibility
             "messages": [],
             "tool_calls": [],
             "tool_results": [],
@@ -495,7 +619,7 @@ class ToolAgent:
         
         if self.verbose:
             logger.info(colored(f"🎯 NEW REQUEST: {query}", "green", attrs=["bold"]))
-            logger.info(colored(f"🔑 ToolAgent token: {token[:10] if token else 'None'}...", "green", attrs=["bold"]))
+            logger.info(colored(f"🔑 ToolAgent using env.OXII_API_KEY: {env.OXII_API_KEY[:10] if env.OXII_API_KEY else 'None'}...", "green", attrs=["bold"]))
         
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(

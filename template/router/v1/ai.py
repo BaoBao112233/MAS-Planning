@@ -1,3 +1,4 @@
+import token
 from typing import Optional, Union
 import logging
 import json
@@ -144,8 +145,10 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
         
         input_data = {
             "input": request.message,
-            "token": request.token
         }
+
+        env.OXII_API_KEY = request.token
+    
         
         logger.info(f'📤 Input data token: {input_data.get("token", "None")[:10]}...')
         
@@ -278,8 +281,9 @@ async def chat_audio(
         
         input_data = {
             "message": transcribed_text,
-            "token": token
         }
+
+        env.OXII_API_KEY = token
         
         # Manager Agent handles all routing internally
         response = agent.invoke(input_data, context=context)

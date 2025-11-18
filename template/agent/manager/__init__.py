@@ -27,6 +27,10 @@ from template.agent.manager.tools import (
     get_current_time, GetCurrentTimeInput,
     get_weather, GetWeatherInput
 )
+
+# Import get_device_list directly
+from template.api_things.info_devices import get_device_list
+
 from pydantic import BaseModel, Field
 from langchain_core.tools import StructuredTool
 from langchain_google_vertexai import ChatVertexAI
@@ -35,6 +39,7 @@ from termcolor import colored
 import logging
 import time
 import json
+import asyncio
 from typing import Dict, Any, Optional
 
 # Configure logging
@@ -1090,8 +1095,7 @@ How can I assist you today?"""
     
     def _get_device_list(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Call get_device_list tool directly from Manager
-        Similar to PlanAgent's implementation but for Manager
+        Call get_device_list directly from api_things (NO MCP)
         
         Args:
             token: Authentication token
@@ -1101,78 +1105,28 @@ How can I assist you today?"""
         """
         try:
             if self.verbose:
-                logger.info(colored("📡 Manager calling get_device_list tool...", "cyan", attrs=['bold']))
+                logger.info(colored("📡 Manager calling get_device_list directly...", "cyan", attrs=['bold']))
             
-            # Import MCP client
-            from langchain_mcp_adapters.client import MultiServerMCPClient
-            import asyncio
+            # Set token in env for api_things to use
+            env.OXII_API_KEY = token
             
-            async def async_get_device_list():
-                """Async wrapper to call get_device_list"""
-                mcp_client = None
+            # Call get_device_list directly
+            result = asyncio.run(get_device_list())
+            
+            if self.verbose:
+                logger.info(colored(f"✅ get_device_list returned successfully", "green", attrs=['bold']))
+            
+            # Parse JSON if result is string
+            if isinstance(result, str):
                 try:
-                    # Initialize temporary MCP client
-                    mcp_client = MultiServerMCPClient(
-                        {"mcp-server": {"url": env.MCP_SERVER_URL, "transport": "sse"}}
-                    )
-                    await mcp_client.__aenter__()
-                    
-                    # Get tools
-                    temp_tools = list(mcp_client.get_tools())
-                    temp_tools_dict = {tool.name: tool for tool in temp_tools}
-                    
-                    if 'get_device_list' not in temp_tools_dict:
-                        logger.warning("⚠️ get_device_list tool not available")
-                        return None
-                    
-                    get_device_list_tool = temp_tools_dict['get_device_list']
-                    
-                    # Call tool with timeout
-                    result = await asyncio.wait_for(
-                        get_device_list_tool.ainvoke({"token": token}),
-                        timeout=20.0
-                    )
-                    
+                    result = json.loads(result)
                     if self.verbose:
-                        logger.info(colored(f"✅ get_device_list returned successfully", "green", attrs=['bold']))
-                    
-                    # Parse JSON if result is string
-                    if isinstance(result, str):
-                        try:
-                            result = json.loads(result)
-                            if self.verbose:
-                                logger.info(colored(f"✅ Parsed JSON response", "green"))
-                        except json.JSONDecodeError as e:
-                            logger.error(f"❌ Failed to parse JSON response: {str(e)}")
-                            return None
-                    
-                    return result
-                    
-                except asyncio.TimeoutError:
-                    logger.warning("⚠️ get_device_list timeout after 20 seconds")
+                        logger.info(colored(f"✅ Parsed JSON response", "green"))
+                except json.JSONDecodeError as e:
+                    logger.error(f"❌ Failed to parse JSON response: {str(e)}")
                     return None
-                except Exception as e:
-                    logger.error(f"❌ Error calling get_device_list: {str(e)}")
-                    return None
-                finally:
-                    if mcp_client:
-                        try:
-                            await mcp_client.__aexit__(None, None, None)
-                        except:
-                            pass
             
-            # Run async function
-            try:
-                loop = asyncio.get_running_loop()
-                # We're in async context, need to run in executor
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(lambda: asyncio.run(async_get_device_list()))
-                    result = future.result(timeout=25)
-                    return result
-            except RuntimeError:
-                # No running loop, can run directly
-                return asyncio.run(async_get_device_list())
+            return result
             
         except Exception as e:
             logger.error(f"❌ Error in _get_device_list: {str(e)}")
