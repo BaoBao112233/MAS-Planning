@@ -1,14 +1,14 @@
 import requests
-import httpx
 import json
 from typing import List
-import asyncio
 import time
 import os
 import logging
+import threading
 
 from template.api_things.common import cron_to_custom_format
 from template.configs.environments import env
+from template.api_things.info_devices import get_device_list
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,18 +18,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Tạo một client HTTP để tái sử dụng
-http_client = httpx.AsyncClient(timeout=60.0)
-
 # Biến lưu trữ cronjob tạm thời để xử lý các tác vụ đồng thời
 temp_cronjob_cache = {}
 
 # Khóa để đảm bảo chỉ một tác vụ truy cập vào cache tại một thời điểm
-cache_lock = asyncio.Lock()
+cache_lock = threading.Lock()
 
 TIME_RETRY = 30
 
-async def ac_controls_mesh(serial_numbers: List[str], net_index: int, app_index: int, vendor: str, power: str, mode: str, temp: str, fan_speed: str, swing_h: str, swing_v: str, quiet: str = None, turbo: str = None, econo: str = None, light: str = None, filter: str = None, clean: str = None, beep: str = None, sleep: int = None, model: int = None, celsius: str = "on"):
+def ac_controls_mesh(serial_numbers: List[str], net_index: int, app_index: int, vendor: str, power: str, mode: str, temp: str, fan_speed: str, swing_h: str, swing_v: str, quiet: str = None, turbo: str = None, econo: str = None, light: str = None, filter: str = None, clean: str = None, beep: str = None, sleep: int = None, model: int = None, celsius: str = "on"):
     """Send AC IR control commands via BLE Mesh network for CONDITIONER devices
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -111,7 +108,7 @@ async def ac_controls_mesh(serial_numbers: List[str], net_index: int, app_index:
         }
 
         logger.info(f"AC controls mesh payload: {payload}")
-        response = await http_client.put(url, headers=headers, json=payload)
+        response = requests.put(url, headers=headers, json=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"AC controls mesh response: {response.json()}")
         logger.info("-------------------------------------")
@@ -121,7 +118,7 @@ async def ac_controls_mesh(serial_numbers: List[str], net_index: int, app_index:
         logger.error(f"Lỗi khi gửi lệnh điều khiển điều hòa: {str(e)}")
         raise
 
-async def ac_controls_mesh_v2(buttonId: int, power: str, mode: str='1', temp: str='24', fan_speed: str='0', swing_h: str='0', swing_v: str='0'):
+def ac_controls_mesh_v2(buttonId: int, power: str, mode: str='1', temp: str='24', fan_speed: str='0', swing_h: str='0', swing_v: str='0'):
     """Send AC IR control commands via BLE Mesh network for CONDITIONER devices
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -134,7 +131,7 @@ async def ac_controls_mesh_v2(buttonId: int, power: str, mode: str='1', temp: st
         swing_v (str): Vertical swing: '1'/'on' for ON, '0'/'off' for OFF. Default is '0'.
     """
 
-    room_info = await get_device_list(env.OXII_API_KEY)
+    room_info = get_device_list()
     room_info = json.loads(room_info)
 
     button_info = None
@@ -186,7 +183,7 @@ async def ac_controls_mesh_v2(buttonId: int, power: str, mode: str='1', temp: st
         }
 
         logger.info(f"AC controls mesh payload: {payload}")
-        response = await http_client.put(url, headers=headers, json=payload)
+        response = requests.put(url, headers=headers, json=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"AC controls mesh response: {response.json()}")
         logger.info("-------------------------------------")

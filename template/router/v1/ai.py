@@ -147,10 +147,9 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
             "input": request.message,
         }
 
+        logger.info(f'📤 Input data token: {request.token[:10]}...')
+
         env.OXII_API_KEY = request.token
-    
-        
-        logger.info(f'📤 Input data token: {input_data.get("token", "None")[:10]}...')
         
          # Tool Agent handles all routing internally
         response = agent.invoke(input_data, context=context)

@@ -323,6 +323,7 @@ async def text_to_speech_with_voice(
 ):
     """
     Convert text to speech using Google Cloud TTS (optimized for speed).
+    Automatically splits long text into smaller chunks to avoid TTS errors.
     
     Args:
         text: Text to convert to speech (will be cleaned automatically)
@@ -341,31 +342,86 @@ async def text_to_speech_with_voice(
                 "yellow"
             ))
         
-        # Sử dụng reusable client
+        # Split text into chunks if too long (max ~4000 chars per chunk for safety)
+        MAX_CHARS_PER_CHUNK = 4000
+        text_chunks = []
+        
+        if len(cleaned_text) <= MAX_CHARS_PER_CHUNK:
+            text_chunks = [cleaned_text]
+        else:
+            # Split by sentences (periods, question marks, exclamation marks)
+            import re
+            sentences = re.split(r'([.!?]+\s+)', cleaned_text)
+            
+            current_chunk = ""
+            for i in range(0, len(sentences), 2):
+                sentence = sentences[i]
+                separator = sentences[i + 1] if i + 1 < len(sentences) else ""
+                
+                # If adding this sentence exceeds limit, save current chunk and start new one
+                if len(current_chunk) + len(sentence) + len(separator) > MAX_CHARS_PER_CHUNK and current_chunk:
+                    text_chunks.append(current_chunk.strip())
+                    current_chunk = sentence + separator
+                else:
+                    current_chunk += sentence + separator
+            
+            # Add remaining text
+            if current_chunk.strip():
+                text_chunks.append(current_chunk.strip())
+            
+            logger.info(colored(
+                f"📄 Split text into {len(text_chunks)} chunks",
+                "cyan"
+            ))
+        
+        # Synthesize each chunk
         client = get_tts_client()
-        synthesis_input = texttospeech.SynthesisInput(text=cleaned_text)
         voice_params = texttospeech.VoiceSelectionParams(
             language_code=language_code,
             name=voice_name,
         )
         
-        # Sử dụng MP3 (nhẹ hơn LINEAR16) và tăng tốc độ đọc
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
             speaking_rate=1.15,  # Đọc nhanh hơn 15%
             pitch=0.0,
         )
-
-        # Gọi API
-        response = client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice_params,
-            audio_config=audio_config
-        )
-
-        # Lưu file MP3
-        with open(path, "wb") as out:
-            out.write(response.audio_content)
+        
+        audio_segments = []
+        for i, chunk in enumerate(text_chunks):
+            synthesis_input = texttospeech.SynthesisInput(text=chunk)
+            
+            # Gọi API
+            response = client.synthesize_speech(
+                input=synthesis_input,
+                voice=voice_params,
+                audio_config=audio_config
+            )
+            
+            audio_segments.append(response.audio_content)
+        
+        # Combine audio segments
+        if len(audio_segments) == 1:
+            # Single segment - write directly
+            with open(path, "wb") as out:
+                out.write(audio_segments[0])
+        else:
+            # Multiple segments - combine using pydub
+            from pydub import AudioSegment
+            import io
+            
+            combined = AudioSegment.empty()
+            for audio_data in audio_segments:
+                segment = AudioSegment.from_mp3(io.BytesIO(audio_data))
+                combined += segment
+            
+            # Export combined audio
+            combined.export(path, format="mp3")
+            
+            logger.info(colored(
+                f"🔗 Combined {len(audio_segments)} audio segments",
+                "green"
+            ))
 
         logger.info(colored(f"✅ TTS completed: {path}", "green"))
 

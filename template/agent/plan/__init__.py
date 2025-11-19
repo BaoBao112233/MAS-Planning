@@ -50,18 +50,21 @@ class PlanAgent(BaseAgent):
                  model: str = "gemini-2.5-flash", 
                  temperature: float = 0.2, 
                  max_iteration=10, 
-                 verbose=True):
+                 verbose=True,
+                 language_code: str = "en-US"):
         super().__init__()
         
         self.name = "Plan Agent"
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
+        self.language_code = language_code  # Store language preference
         self.tools = []  # No tools needed for PlanAgent
         self.tools_dict = {}
         
         # Initialize LLM
         logger.info(colored(f"Plan Agent using model: {model}", "green", attrs=["bold"]))
+        logger.info(colored(f"Plan Agent language code: {language_code}", "cyan", attrs=["bold"]))
 
         try:
             # Base LLM without tools (for plan generation)
@@ -130,7 +133,6 @@ class PlanAgent(BaseAgent):
         2. Create 2 priority plans
         """
         user_input = state.get('input', '')
-        token = state.get('token', '')
 
         # Debug: Check what's in state
         if self.verbose:
@@ -158,15 +160,11 @@ class PlanAgent(BaseAgent):
 
         # Step 1 (PlanAgent): Get device information
         device_info = None
-        if token:
-            device_info = self._get_device_list(token)
-            if device_info and self.verbose:
-                room_count = self._count_rooms(device_info)
-                logger.info(colored(f"✅ Device information retrieved successfully", "green"))
-                logger.info(f"🏠 Found {room_count} rooms with devices")
-        else:
-            logger.warning(colored("⚠️ No token provided - cannot retrieve devices", "yellow"))
-
+        device_info = self._get_device_list()
+        if device_info and self.verbose:
+            room_count = self._count_rooms(device_info)
+            logger.info(colored(f"✅ Device information retrieved successfully", "green"))
+            logger.info(f"🏠 Found {room_count} rooms with devices")
         # Step 2: Create 2 priority plans
         if self.verbose:
             logger.info(colored("\n" + "="*80, "cyan"))
@@ -248,16 +246,16 @@ class PlanAgent(BaseAgent):
                 }
             }
 
-    def _get_device_list(self, token: str) -> dict:
+    def _get_device_list(self) -> dict:
         """Call get_device_list directly from api_things (NO MCP)"""
         try:
             logger.info(colored("📡 Calling get_device_list directly...", "green", attrs=['bold']))
             
-            # Set token in env for api_things to use
-            env.OXII_API_KEY = token
+            # # Set token in env for api_things to use
+            # env.OXII_API_KEY = token
             
-            # Call get_device_list directly
-            result = asyncio.run(get_device_list())
+            # Call get_device_list directly (synchronous call)
+            result = get_device_list()
             
             if self.verbose and result:
                 logger.info(f"📱 Device data retrieved: {len(str(result))} characters")
@@ -266,6 +264,8 @@ class PlanAgent(BaseAgent):
             
         except Exception as e:
             logger.error(f"❌ Error calling get_device_list: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     def _create_priority_plans(self, user_input: str, input_analysis: dict, device_info) -> dict:
@@ -290,8 +290,41 @@ class PlanAgent(BaseAgent):
             device_context=device_context
         )
         
+        # Determine language instruction
+        is_vietnamese = self.language_code.startswith('vi')
+        language_instruction = (
+            "CRITICAL: You MUST respond in VIETNAMESE (Tiếng Việt). All task descriptions must be in Vietnamese. "
+            "Example: 'Bật đèn trần trong Living room', 'Tắt quạt trong Bed room'."
+            if is_vietnamese else
+            "CRITICAL: You MUST respond in ENGLISH. All task descriptions must be in English. "
+            "Example: 'Turn on ceiling light in Living room', 'Turn off fan in Bed room'."
+        )
+        
+        system_message_content = (
+            f"You are an expert smart home planner. "
+            f"{language_instruction} "
+            f"\n\n**CRITICAL REQUIREMENTS**:\n"
+            f"1. You MUST create EXACTLY 2 COMPLETE plans: Optimized_Plan AND Conservative_Plan\n"
+            f"2. Each plan MUST have 3-5 tasks\n"
+            f"3. BOTH plans are MANDATORY - if you only create one plan, it is WRONG\n"
+            f"4. Use the EXACT XML format specified in the prompt\n"
+            f"5. ONLY control devices in rooms explicitly mentioned in the user request\n"
+            f"6. NEVER include IR-controlled devices (remoteIRId != null)\n"
+            f"\n**MANDATORY OUTPUT FORMAT**:\n"
+            f"<Optimized_Plan>\n"
+            f"- Task 1\n"
+            f"- Task 2\n"
+            f"- Task 3\n"
+            f"</Optimized_Plan>\n\n"
+            f"<Conservative_Plan>\n"
+            f"- Task 1\n"
+            f"- Task 2\n"
+            f"- Task 3\n"
+            f"</Conservative_Plan>"
+        )
+        
         messages = convert_messages_list([
-            SystemMessage("You are an expert smart home planner. Always create exactly 2 plans in the specified XML format. ONLY control devices in rooms explicitly mentioned in the user request."),
+            SystemMessage(system_message_content),
             HumanMessage(prompt)
         ])
         
@@ -315,14 +348,35 @@ class PlanAgent(BaseAgent):
             # Extract plans from XML format
             plan_data = extract_priority_plans(llm_response.content)
             
-            # Validate plans
-            if not any(plan_data.get(key) for key in ['Optimized_Plan', 'Conservative_Plan']):
-                logger.warning(colored("⚠️ No valid plans extracted, using fallback", 'yellow'))
-                plan_data = self._get_fallback_plans()
+            # Validate plans - BOTH plans must have at least 1 task
+            optimized_plan = plan_data.get('Optimized_Plan', [])
+            conservative_plan = plan_data.get('Conservative_Plan', [])
+            
+            if not optimized_plan or not conservative_plan:
+                logger.warning(colored(f"⚠️ Incomplete plans detected! Optimized: {len(optimized_plan)} tasks, Conservative: {len(conservative_plan)} tasks", 'yellow'))
+                logger.warning(f"⚠️ LLM Response (full): {llm_response.content}")
+                
+                # If only one plan exists, create a simple variation for the other
+                if optimized_plan and not conservative_plan:
+                    logger.info("🔧 Creating Conservative plan from Optimized plan...")
+                    # Conservative = subset of Optimized (fewer tasks)
+                    conservative_plan = optimized_plan[:max(1, len(optimized_plan) - 1)]
+                elif conservative_plan and not optimized_plan:
+                    logger.info("🔧 Creating Optimized plan from Conservative plan...")
+                    # Optimized = Conservative + more tasks
+                    optimized_plan = conservative_plan.copy()
+                else:
+                    # Neither plan exists - use fallback
+                    logger.warning(colored("⚠️ No valid plans extracted, using fallback", 'yellow'))
+                    fallback = self._get_fallback_plans()
+                    return {
+                        'optimized_plan': fallback.get('optimized_plan', []),
+                        'conservative_plan': fallback.get('conservative_plan', [])
+                    }
             
             return {
-                'optimized_plan': plan_data.get('Optimized_Plan', []),
-                'conservative_plan': plan_data.get('Conservative_Plan', [])
+                'optimized_plan': optimized_plan,
+                'conservative_plan': conservative_plan
             }
             
         except Exception as e:

@@ -1,11 +1,10 @@
 import requests
-import httpx
 import json
 from typing import List
-import asyncio
 import time
 import os
 import logging
+import threading
 
 from template.api_things.common import cron_to_custom_format
 from template.configs.environments import env
@@ -19,18 +18,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Tạo một client HTTP để tái sử dụng
-http_client = httpx.AsyncClient(timeout=60.0)
-
 # Biến lưu trữ cronjob tạm thời để xử lý các tác vụ đồng thời
 temp_cronjob_cache = {}
 
 # Khóa để đảm bảo chỉ một tác vụ truy cập vào cache tại một thời điểm
-cache_lock = asyncio.Lock()
+cache_lock = threading.Lock()
 
 TIME_RETRY = 30
 
-async def switch_on_off_all_device(command: str):
+def switch_on_off_all_device(command: str):
     """Turn on off all devices in a house using one-touch control
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -38,7 +34,7 @@ async def switch_on_off_all_device(command: str):
     """
     logger.info(f"Switch on all device with env.OXII_API_KEY: {env.OXII_API_KEY}")
     try:
-        room_info = await get_device_list(env.OXII_API_KEY)
+        room_info = get_device_list()
         room_info = json.loads(room_info)
 
         # Lấy thông tin về house_id
@@ -58,7 +54,7 @@ async def switch_on_off_all_device(command: str):
             one_touch_url = env.OXII_ROOT_API_URL + f"/api/app/house/{house_id}/one-touch/TURN_ON_ALL_DEVICES/execute"
             text_command = "bật"
         
-        one_touch_response = await http_client.post(one_touch_url, headers=headers)
+        one_touch_response = requests.post(one_touch_url, headers=headers, timeout=60.0)
         one_touch_response.raise_for_status()
         
         result = one_touch_response.json()
@@ -71,7 +67,7 @@ async def switch_on_off_all_device(command: str):
         
         while time.time() - start_time < TIME_RETRY:
             try:
-                current_status = await get_device_list(env.OXII_API_KEY)
+                current_status = get_device_list()
                 current_status = json.loads(current_status)
                 latest_status = current_status
                 logger.info(f"Current status: {current_status} after {time.time() - start_time} seconds")
@@ -92,11 +88,11 @@ async def switch_on_off_all_device(command: str):
                     return f"Tất cả thiết bị đã được {text_command} thành công"
                 
                 # Wait 1 second before next check
-                await asyncio.sleep(1)
+                time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Lỗi khi kiểm tra trạng thái thiết bị: {str(e)}")
-                await asyncio.sleep(1)
+                time.sleep(1)
                 continue
         
         if not success:
@@ -107,7 +103,7 @@ async def switch_on_off_all_device(command: str):
         logger.error(f"Lỗi khi bật tất cả thiết bị: {str(e)}")
         return f"Lỗi khi bật tất cả thiết bị: {str(e)}"
 
-async def switch_device_by_type(device_type: str, action: str):
+def switch_device_by_type(device_type: str, action: str):
     """Turn on/off devices by type using one-touch control
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -135,7 +131,7 @@ async def switch_device_by_type(device_type: str, action: str):
         one_touch_code = f"TURN_{action}_{device_type}"
         
         # Lấy danh sách nhà từ API
-        room_info = await get_device_list(env.OXII_API_KEY)
+        room_info = get_device_list()
         room_info = json.loads(room_info)
 
         # Lấy thông tin về house_id
@@ -150,7 +146,7 @@ async def switch_device_by_type(device_type: str, action: str):
         # Gọi API one-touch để điều khiển thiết bị
         one_touch_url = env.OXII_ROOT_API_URL + f"/api/app/house/{house_id}/one-touch/{one_touch_code}/execute"
         
-        one_touch_response = await http_client.post(one_touch_url, headers=headers)
+        one_touch_response = requests.post(one_touch_url, headers=headers, timeout=60.0)
         one_touch_response.raise_for_status()
         
         result = one_touch_response.json()
@@ -163,7 +159,7 @@ async def switch_device_by_type(device_type: str, action: str):
         
         while time.time() - start_time < TIME_RETRY:
             try:
-                current_status = await get_device_list(env.OXII_API_KEY)
+                current_status = get_device_list()
                 current_status = json.loads(current_status)
                 latest_status = current_status
                 logger.info(f"Current status: {current_status} after {time.time() - start_time} seconds")
@@ -189,11 +185,11 @@ async def switch_device_by_type(device_type: str, action: str):
                     return message
                 
                 # Wait 1 second before next check
-                await asyncio.sleep(1)
+                time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Lỗi khi kiểm tra trạng thái thiết bị: {str(e)}")
-                await asyncio.sleep(1)
+                time.sleep(1)
                 continue
         
         if not success:
@@ -205,7 +201,7 @@ async def switch_device_by_type(device_type: str, action: str):
         logger.error(f"Lỗi khi điều khiển thiết bị {device_type}: {str(e)}")
         return f"Lỗi khi điều khiển thiết bị {device_type}: {str(e)}"
 
-async def switch_on_off_controls_v2(buttonId: int, data: int):
+def switch_on_off_controls_v2(buttonId: int, data: int):
     """Control the on/off state of a switch device with mesh network support
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -213,7 +209,7 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
         data (int): State to set (0 for off, 1 for on).
     """
 
-    room_info = await get_device_list(env.OXII_API_KEY)
+    room_info = get_device_list()
     room_info = json.loads(room_info)
 
     button_info = None
@@ -233,7 +229,7 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
     
     try:
         # get serial number
-        response = await get_device_info(env.OXII_API_KEY, deviceId)
+        response = get_device_info(deviceId)
         logger.info(f"Device info: {response.json()}")
 
         if response.json()['data']['status'] == 2 and response.json()['data']['joinMesh'] == 0:
@@ -258,7 +254,7 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
         }
         logger.info(f"Headers: {headers}")
         logger.info(f"Switch on/off controls v2 payload: {payload}")
-        response = await http_client.put(url, headers=headers, data=payload)
+        response = requests.put(url, headers=headers, data=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"Switch on/off controls v2 response: {response.json()}")
         logger.info("-------------------------------------")
@@ -270,7 +266,7 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
         
         while time.time() - start_time < TIME_RETRY:
             try:
-                current_status = await get_device_list(env.OXII_API_KEY)
+                current_status = get_device_list()
                 current_status = json.loads(current_status)
                 latest_status = current_status
                 logger.info(f"Current status: {current_status} after {time.time() - start_time} seconds")
@@ -288,11 +284,11 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
                                 return message
                 
                 # Wait 1 second before next check
-                await asyncio.sleep(1)
+                time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Lỗi khi kiểm tra trạng thái thiết bị: {str(e)}")
-                await asyncio.sleep(1)
+                time.sleep(1)
                 continue
         
         if not success:
@@ -304,7 +300,7 @@ async def switch_on_off_controls_v2(buttonId: int, data: int):
         logger.error(f"Lỗi khi gửi lệnh điều khiển thiết bị: {str(e)}")
         raise
 
-async def room_one_touch_control(room_id: str, one_touch_code: str):
+def room_one_touch_control(room_id: str, one_touch_code: str):
     """Execute room-level one-touch control for devices in a specific room
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -345,7 +341,7 @@ async def room_one_touch_control(room_id: str, one_touch_code: str):
         logger.info(f"Room one-touch control URL: {url}")
         logger.info(f"Headers: {headers}")
         
-        response = await http_client.post(url, headers=headers)
+        response = requests.post(url, headers=headers, timeout=60.0)
         response.raise_for_status()
         
         result = response.json()
@@ -366,7 +362,7 @@ async def room_one_touch_control(room_id: str, one_touch_code: str):
         
         return action_messages.get(one_touch_code, "Đã thực hiện lệnh one-touch thành công")
         
-    except httpx.HTTPStatusError as e:
+    except requests.exceptions.HTTPError as e:
         if e.response.status_code == 401:
             logger.error(f"Lỗi xác thực hoặc không tìm thấy phòng: {str(e)}")
             raise ValueError("Phòng không tồn tại hoặc bạn không có quyền điều khiển thiết bị trong phòng này")

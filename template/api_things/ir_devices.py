@@ -1,11 +1,10 @@
 import requests
-import httpx
 import json
 from typing import List
-import asyncio
 import time
 import os
 import logging
+import threading
 
 from template.api_things.common import cron_to_custom_format
 from template.configs.environments import env
@@ -19,18 +18,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Tạo một client HTTP để tái sử dụng
-http_client = httpx.AsyncClient(timeout=60.0)
-
 # Biến lưu trữ cronjob tạm thời để xử lý các tác vụ đồng thời
 temp_cronjob_cache = {}
 
 # Khóa để đảm bảo chỉ một tác vụ truy cập vào cache tại một thời điểm
-cache_lock = asyncio.Lock()
+cache_lock = threading.Lock()
 
 TIME_RETRY = 30
 
-async def retrieve_ir_data(label: str, brandId: int, modelName: str):
+def retrieve_ir_data(label: str, brandId: int, modelName: str):
     """Retrieve IR data template and models for remote button based on device type and brand
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -55,7 +51,7 @@ async def retrieve_ir_data(label: str, brandId: int, modelName: str):
             'X-Origin': 'smarthiz'
         }
         logger.info(f"Retrieve IR data payload: {payload}")
-        response = await http_client.get(url, headers=headers, params=payload)
+        response = requests.get(url, headers=headers, params=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"Retrieve IR data response: {response.json()}")
         logger.info("-------------------------------------")
@@ -64,14 +60,14 @@ async def retrieve_ir_data(label: str, brandId: int, modelName: str):
         logger.error(f"Lỗi khi lấy dữ liệu IR: {str(e)}")
         raise
 
-async def retrieve_ir_data_v2(buttonId: int):
+def retrieve_ir_data_v2(buttonId: int):
     """Retrieve IR data template and models for remote button based on device type and brand
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
         buttonId (int): ID of the remote button.
     """
 
-    room_info = await get_device_list(env.OXII_API_KEY)
+    room_info = get_device_list()
     room_info = json.loads(room_info)
 
     button_info = None
@@ -103,7 +99,7 @@ async def retrieve_ir_data_v2(buttonId: int):
             'X-Origin': 'smarthiz'
         }
         logger.info(f"Retrieve IR data payload: {payload}")
-        response = await http_client.get(url, headers=headers, params=payload)
+        response = requests.get(url, headers=headers, params=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"Retrieve IR data response: {response.json()}")
         logger.info("-------------------------------------")
@@ -112,7 +108,7 @@ async def retrieve_ir_data_v2(buttonId: int):
         logger.error(f"Lỗi khi lấy dữ liệu IR: {str(e)}")
         raise
 
-async def open_ir_send_for_testing_mesh(serial_numbers: List[str], net_index: int, app_index: int, label: str, brandId: int, modelName: str, label_code: str, command_type: int=212):
+def open_ir_send_for_testing_mesh(serial_numbers: List[str], net_index: int, app_index: int, label: str, brandId: int, modelName: str, label_code: str, command_type: int=212):
     """Send IR command to devices in mesh network for TV, FAN devices, not for CONDITIONER devices
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -128,7 +124,7 @@ async def open_ir_send_for_testing_mesh(serial_numbers: List[str], net_index: in
 
     logger.info(f"Open IR send for testing mesh: {serial_numbers}, {net_index}, {app_index}, {label}, {brandId}, {modelName}, {label_code}")
     try:
-        ir_data_response = await retrieve_ir_data(env.OXII_API_KEY, label, brandId, modelName)
+        ir_data_response = retrieve_ir_data(label, brandId, modelName)
         ir_data_template = ir_data_response['data']['remoteDataIR']['template']
         
         data = None
@@ -168,7 +164,7 @@ async def open_ir_send_for_testing_mesh(serial_numbers: List[str], net_index: in
         }
 
         logger.info(f"Open IR send for testing mesh payload: {payload}")
-        response = await http_client.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"Open IR send for testing mesh response: {response.json()}")
         logger.info("-------------------------------------")
@@ -180,7 +176,7 @@ async def open_ir_send_for_testing_mesh(serial_numbers: List[str], net_index: in
         logger.error(f"Lỗi khi gửi lệnh IR: {str(e)}")
         raise
 
-async def open_ir_send_for_testing_mesh_v2(buttonId: int, templateID: int):
+def open_ir_send_for_testing_mesh_v2(buttonId: int, templateID: int):
     """Send IR command to devices in mesh network for TV, FAN devices, not for CONDITIONER devices
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -188,7 +184,7 @@ async def open_ir_send_for_testing_mesh_v2(buttonId: int, templateID: int):
         templateID (int): The ID of the control template.
     """
 
-    room_info = await get_device_list(env.OXII_API_KEY)
+    room_info = get_device_list()
     room_info = json.loads(room_info)
 
     button_info = None
@@ -211,7 +207,7 @@ async def open_ir_send_for_testing_mesh_v2(buttonId: int, templateID: int):
 
     logger.info(f"Open IR send for testing mesh: {buttonId}, {serial_numbers}, {net_index}, {app_index}, {label}, {brandId}, {modelName}")
     try:
-        ir_data_response = await retrieve_ir_data(env.OXII_API_KEY, label, brandId, modelName)
+        ir_data_response = retrieve_ir_data(label, brandId, modelName)
         ir_data_template = ir_data_response['data']['remoteDataIR']['template']
         
         data = None
@@ -251,7 +247,7 @@ async def open_ir_send_for_testing_mesh_v2(buttonId: int, templateID: int):
         }
 
         logger.info(f"Open IR send for testing mesh payload: {payload}")
-        response = await http_client.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=60.0)
         response.raise_for_status()
         logger.info(f"Open IR send for testing mesh response: {response.json()}")
         logger.info("-------------------------------------")

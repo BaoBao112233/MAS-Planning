@@ -8,7 +8,7 @@ from template.message.message import HumanMessage, SystemMessage
 class ManagerState(TypedDict):
     """State for Manager Agent workflow"""
     input: str                          # User query/input
-    token: str                          # Authentication token
+    # token: str                          # Authentication token
     messages: List[Any]                 # Message history
     route: str                          # Current route (plan/tool/direct)
     reasoning_result: Dict[str, Any]    # Result from reasoning step

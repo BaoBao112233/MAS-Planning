@@ -1,11 +1,10 @@
 import requests
-import httpx
 import json
 from typing import List
-import asyncio
 import time
 import os
 import logging
+import threading
 
 from template.api_things.common import cron_to_custom_format
 from template.configs.environments import env
@@ -19,18 +18,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Tạo một client HTTP để tái sử dụng
-http_client = httpx.AsyncClient(timeout=60.0)
-
 # Biến lưu trữ cronjob tạm thời để xử lý các tác vụ đồng thời
 temp_cronjob_cache = {}
 
 # Khóa để đảm bảo chỉ một tác vụ truy cập vào cache tại một thời điểm
-cache_lock = asyncio.Lock()
+cache_lock = threading.Lock()
 
 TIME_RETRY = 30
 
-async def cronjob_device(deviceId: int, action: int, job_status: int, cron_time: str, button_code: str, command: str, issetting_online: bool):
+def cronjob_device(deviceId: int, action: int, job_status: int, cron_time: str, button_code: str, command: str, issetting_online: bool):
     """Create or update cronjob settings for an OXII device
     Args:
         deviceId (int): ID of the device.
@@ -46,15 +42,15 @@ async def cronjob_device(deviceId: int, action: int, job_status: int, cron_time:
     
     # Thêm khóa để xử lý đồng thời
     device_key = f"device_{deviceId}"
-    async with cache_lock:
-        # Thêm trì hoãn ngẫu nhiên để tránh xung đột
-        await asyncio.sleep(1)
+    with cache_lock:
+        # Thêm trì hoãn để tránh xung đột
+        time.sleep(1)
         
         # try:
         # get cronjob setting
         cronjob, serial_number = None, None
         try:
-            response = await get_device_info(deviceId)
+            response = get_device_info(deviceId)
         except ValueError as e: # Bắt lỗi từ get_device_info
             return str(e)
         except Exception as e:
@@ -123,7 +119,7 @@ async def cronjob_device(deviceId: int, action: int, job_status: int, cron_time:
                 'X-Origin': 'smarthiz'
             }
             logger.info(f"Headers: {headers}")
-            response = await http_client.post(url, headers=headers, data=payload)
+            response = requests.post(url, headers=headers, data=payload, timeout=60.0)
             response.raise_for_status()
 
         # cronjob device SH4
@@ -223,7 +219,7 @@ async def cronjob_device(deviceId: int, action: int, job_status: int, cron_time:
                 'X-Origin': 'smarthiz'
             }
             logger.info(f"Headers: {headers}")
-            response = await http_client.post(url, headers=headers, data=payload)
+            response = requests.post(url, headers=headers, data=payload, timeout=60.0)
             response.raise_for_status()
             
             # Cập nhật cache với response mới nếu thành công
@@ -246,7 +242,7 @@ async def cronjob_device(deviceId: int, action: int, job_status: int, cron_time:
         #         del temp_cronjob_cache[device_key]
         #     raise
 
-async def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_time: str, button_code: str, command: str, issetting_online: bool):
+def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_time: str, button_code: str, command: str, issetting_online: bool):
     """Create or update cronjob settings for an OXII device
     Args:
         env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
@@ -259,7 +255,7 @@ async def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_ti
         issetting_online (bool): Whether to apply setting online.
     """
 
-    room_info = await get_device_list(env.OXII_API_KEY)
+    room_info = get_device_list()
     room_info = json.loads(room_info)
 
     button_info = None
@@ -276,15 +272,15 @@ async def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_ti
     
     # Thêm khóa để xử lý đồng thời
     device_key = f"device_{deviceId}"
-    async with cache_lock:
-        # Thêm trì hoãn ngẫu nhiên để tránh xung đột
-        await asyncio.sleep(1)
+    with cache_lock:
+        # Thêm trì hoãn để tránh xung đột
+        time.sleep(1)
         
         # try:
         # get cronjob setting
         cronjob, serial_number = None, None
         try:
-            response = await get_device_info(env.OXII_API_KEY, deviceId)
+            response = get_device_info(deviceId)
         except ValueError as e: # Bắt lỗi từ get_device_info
             return str(e)
         except Exception as e:
@@ -353,7 +349,7 @@ async def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_ti
                 'X-Origin': 'smarthiz'
             }
             logger.info(f"Headers: {headers}")
-            response = await http_client.post(url, headers=headers, data=payload)
+            response = requests.post(url, headers=headers, data=payload, timeout=60.0)
             response.raise_for_status()
 
         # cronjob device SH4
@@ -453,7 +449,7 @@ async def cronjob_device_v2(buttonId: int, action: int, job_status: int, cron_ti
                 'X-Origin': 'smarthiz'
             }
             logger.info(f"Headers: {headers}")
-            response = await http_client.post(url, headers=headers, data=payload)
+            response = requests.post(url, headers=headers, data=payload, timeout=60.0)
             response.raise_for_status()
             
             # Cập nhật cache với response mới nếu thành công

@@ -191,7 +191,11 @@ IMPORTANT LANGUAGE INSTRUCTION:
         """Lazy load Plan Agent"""
         if self._plan_agent is None:
             from template.agent.plan import PlanAgent
-            self._plan_agent = PlanAgent(verbose=self.verbose, model=env.PLAN_MODEL_NAME)
+            self._plan_agent = PlanAgent(
+                verbose=self.verbose, 
+                model=env.PLAN_MODEL_NAME,
+                language_code=self.language_code  # Pass language code to Plan Agent
+            )
             
             # Initialize async components
             try:
@@ -230,7 +234,11 @@ IMPORTANT LANGUAGE INSTRUCTION:
         """Lazy load Tool Agent"""
         if self._tool_agent is None:
             from template.agent.tool import ToolAgent
-            self._tool_agent = ToolAgent(verbose=self.verbose, model=env.TOOL_MODEL_NAME)
+            self._tool_agent = ToolAgent(
+                verbose=self.verbose, 
+                model=env.TOOL_MODEL_NAME,
+                language_code=self.language_code  # Pass language code to Tool Agent
+            )
             # Initialize ToolAgent async components
             try:
                 import asyncio
@@ -561,8 +569,8 @@ IMPORTANT LANGUAGE INSTRUCTION:
                     if self.verbose:
                         logger.info(colored("📋 Show Device Status - Manager calling get_device_list", "cyan", attrs=["bold"]))
                     
-                    token = state.get('token', '')
-                    device_list = self._get_device_list(token)
+                    # token = state.get('token', '')
+                    device_list = self._get_device_list()
                     
                     if self.verbose:
                         logger.info(f"📊 Device list type: {type(device_list)}")
@@ -941,8 +949,13 @@ How can I assist you today?"""
             logger.info(f"📝 Finalizing response from {agent_type} agent")
         
         try:
-            # Format the final response
-            final_answer = format_final_response(delegation_result, agent_type, user_input)
+            # Format the final response with language_code
+            final_answer = format_final_response(
+                delegation_result, 
+                agent_type, 
+                user_input,
+                language_code=self.language_code
+            )
             
             # Add metadata for debugging if verbose
             if self.verbose and agent_type != 'direct':
@@ -960,7 +973,11 @@ How can I assist you today?"""
         except Exception as e:
             logger.error(f"❌ Error finalizing response: {str(e)}")
             
-            fallback_response = "I apologize, but I encountered an error while preparing my response. Please try again."
+            # Fallback response in appropriate language
+            if self.language_code.startswith('vi'):
+                fallback_response = "Xin lỗi, đã xảy ra lỗi khi chuẩn bị phản hồi. Vui lòng thử lại."
+            else:
+                fallback_response = "I apologize, but I encountered an error while preparing my response. Please try again."
             
             return {
                 **state,
@@ -1093,13 +1110,10 @@ How can I assist you today?"""
                 'error': str(e)
             }
     
-    def _get_device_list(self, token: str) -> Optional[Dict[str, Any]]:
+    def _get_device_list(self) -> Optional[Dict[str, Any]]:
         """
         Call get_device_list directly from api_things (NO MCP)
-        
-        Args:
-            token: Authentication token
-            
+
         Returns:
             Device list data or None if failed
         """
@@ -1107,11 +1121,10 @@ How can I assist you today?"""
             if self.verbose:
                 logger.info(colored("📡 Manager calling get_device_list directly...", "cyan", attrs=['bold']))
             
-            # Set token in env for api_things to use
-            env.OXII_API_KEY = token
+ 
             
-            # Call get_device_list directly
-            result = asyncio.run(get_device_list())
+            # Call get_device_list directly (now synchronous)
+            result = get_device_list()
             
             if self.verbose:
                 logger.info(colored(f"✅ get_device_list returned successfully", "green", attrs=['bold']))

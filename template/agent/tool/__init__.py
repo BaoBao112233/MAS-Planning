@@ -122,12 +122,13 @@ class AsyncGraphExecutor:
 class ToolAgent:
     """Tool Agent using direct API calls to api_things functions (NO MCP)"""
 
-    def __init__(self, model="gemini-2.5-flash", temperature=0.2, verbose=False, max_iterations=5):
+    def __init__(self, model="gemini-2.5-flash", temperature=0.2, verbose=False, max_iterations=5, language_code="en-US"):
         self.name = "Tool Agent"
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
         self.max_iterations = max_iterations
+        self.language_code = language_code  # Store language preference
         self.tools = []
         self.tools_dict = {}
         self.llm = None
@@ -137,6 +138,9 @@ class ToolAgent:
         # Initialize tools immediately (no async needed)
         self._init_tools()
         self._init_llm()
+        
+        if self.verbose:
+            logger.info(colored(f"Tool Agent language code: {language_code}", "cyan", attrs=["bold"]))
 
     def _init_tools(self):
         """Initialize tools as LangChain StructuredTools wrapping api_things functions"""
@@ -219,58 +223,58 @@ class ToolAgent:
     # Wrapper functions for api_things (sync versions for StructuredTool.func)
     # ==========================================================
     def _sync_get_device_list(self) -> str:
-        return asyncio.run(get_device_list())
+        return get_device_list()
     
     def _sync_switch_on_off_controls_v2(self, buttonId: int, data: int) -> str:
-        return asyncio.run(switch_on_off_controls_v2(buttonId, data))
+        return switch_on_off_controls_v2(buttonId, data)
     
     def _sync_ac_controls_mesh_v2(self, buttonId: int, power: str, mode: str = '1', 
                                    temp: str = '24', fan_speed: str = '0', 
                                    swing_h: str = '0', swing_v: str = '0') -> str:
-        return asyncio.run(ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v))
+        return ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v)
     
     def _sync_cronjob_device_v2(self, buttonId: int, action: int, job_status: int, 
                                  cron_time: str, button_code: str, command: str, 
                                  issetting_online: bool) -> str:
-        return asyncio.run(cronjob_device_v2(buttonId, action, job_status, cron_time, 
-                                               button_code, command, issetting_online))
+        return cronjob_device_v2(buttonId, action, job_status, cron_time, 
+                                  button_code, command, issetting_online)
     
     def _sync_room_one_touch_control(self, room_id: str, one_touch_code: str) -> str:
-        return asyncio.run(room_one_touch_control(room_id, one_touch_code))
+        return room_one_touch_control(room_id, one_touch_code)
     
     def _sync_switch_on_off_all_device(self, command: str) -> str:
-        return asyncio.run(switch_on_off_all_device(command))
+        return switch_on_off_all_device(command)
     
     def _sync_switch_device_by_type(self, device_type: str, action: str) -> str:
-        return asyncio.run(switch_device_by_type(device_type, action))
+        return switch_device_by_type(device_type, action)
     
-    # Async versions for StructuredTool.coroutine
+    # Async versions for StructuredTool.coroutine - now just wrapping sync calls
     async def _async_get_device_list(self) -> str:
-        return await get_device_list()
+        return get_device_list()
     
     async def _async_switch_on_off_controls_v2(self, buttonId: int, data: int) -> str:
-        return await switch_on_off_controls_v2(buttonId, data)
+        return switch_on_off_controls_v2(buttonId, data)
     
     async def _async_ac_controls_mesh_v2(self, buttonId: int, power: str, mode: str = '1',
                                           temp: str = '24', fan_speed: str = '0',
                                           swing_h: str = '0', swing_v: str = '0') -> str:
-        return await ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v)
+        return ac_controls_mesh_v2(buttonId, power, mode, temp, fan_speed, swing_h, swing_v)
     
     async def _async_cronjob_device_v2(self, buttonId: int, action: int, job_status: int,
                                         cron_time: str, button_code: str, command: str,
                                         issetting_online: bool) -> str:
-        result = await cronjob_device_v2(buttonId, action, job_status, cron_time,
-                                           button_code, command, issetting_online)
+        result = cronjob_device_v2(buttonId, action, job_status, cron_time,
+                                    button_code, command, issetting_online)
         return json.dumps(result) if isinstance(result, dict) else str(result)
     
     async def _async_room_one_touch_control(self, room_id: str, one_touch_code: str) -> str:
-        return await room_one_touch_control(room_id, one_touch_code)
+        return room_one_touch_control(room_id, one_touch_code)
     
     async def _async_switch_on_off_all_device(self, command: str) -> str:
-        return await switch_on_off_all_device(command)
+        return switch_on_off_all_device(command)
     
     async def _async_switch_device_by_type(self, device_type: str, action: str) -> str:
-        return await switch_device_by_type(device_type, action)
+        return switch_device_by_type(device_type, action)
 
     async def init_async(self):
         """Compatibility method - no longer needed but kept for backward compatibility"""
@@ -291,7 +295,19 @@ class ToolAgent:
         try:
             messages = state.get("messages", [])
             if not messages:
-                system_msg = SystemMessage(content=TOOL_PROMPT)
+                # Add language instruction to system prompt
+                is_vietnamese = self.language_code.startswith('vi')
+                language_instruction = (
+                    "\n\n🌍 **CRITICAL LANGUAGE INSTRUCTION**: You MUST respond in VIETNAMESE (Tiếng Việt). "
+                    "All responses, success messages, and error messages must be in Vietnamese.\n"
+                    "Example: '✅ Đã gửi lệnh bật đèn phòng ngủ thành công' NOT '✅ Command to turn on bedroom light sent successfully'"
+                    if is_vietnamese else
+                    "\n\n🌍 **CRITICAL LANGUAGE INSTRUCTION**: You MUST respond in ENGLISH. "
+                    "All responses, success messages, and error messages must be in English.\n"
+                    "Example: '✅ Command to turn on bedroom light sent successfully'"
+                )
+                
+                system_msg = SystemMessage(content=TOOL_PROMPT + language_instruction)
                 # ✅ Inject token context into user message
                 token_info = ""
                 if state.get("token"):

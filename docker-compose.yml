@@ -88,9 +88,6 @@ services:
 networks:
   mas-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/16
 
 # Volumes for persistent storage
 volumes:

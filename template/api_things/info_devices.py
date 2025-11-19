@@ -1,14 +1,20 @@
 import requests
-import httpx
 import json
 from typing import List
-import asyncio
 import time
 import os
 import logging
+import threading
 
 from template.api_things.common import cron_to_custom_format
 from template.configs.environments import env
+
+try:
+    from toon_format import encode
+    TOON_AVAILABLE = True
+except ImportError:
+    TOON_AVAILABLE = False
+    logging.warning("toon-format not installed. TOON format will not be available.")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,28 +24,27 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Tạo một client HTTP để tái sử dụng
-http_client = httpx.AsyncClient(timeout=60.0)
-
 # Biến lưu trữ cronjob tạm thời để xử lý các tác vụ đồng thời
 temp_cronjob_cache = {}
 
 # Khóa để đảm bảo chỉ một tác vụ truy cập vào cache tại một thời điểm
-cache_lock = asyncio.Lock()
+cache_lock = threading.Lock()
 
 TIME_RETRY = 30
 
-async def get_device_list():
+def get_device_list(is_format_toon: bool = True):
     """
     Get status of devices in the house from Oxii API.
+    
     Args:
-        env.OXII_API_KEY (str): env.OXII_API_KEY authentication from Oxii API.
+        is_format_toon (bool): If True, convert to TOON format (default True). 
+                               If False, return as JSON string.
 
     Returns:
-        str: List of devices in the house.
+        str: List of devices in the house (TOON format if is_format_toon=True, JSON otherwise).
     """
     
-    logger.info(f"Get device list with env.OXII_API_KEY: {env.OXII_API_KEY}")
+    logger.info(f"Get device list with env.OXII_API_KEY: {env.OXII_API_KEY[:10]}... (TOON format: {is_format_toon})")
 
     try:
         api_url = env.OXII_ROOT_API_URL + "/api/app/oxii/home"
@@ -49,8 +54,8 @@ async def get_device_list():
             'Authorization': f"Bearer {env.OXII_API_KEY}"
         }
         payload = {"query":" ","variables":{}}
-        logger.info(f"Headers: {headers}")
-        response = await http_client.get(api_url, headers=headers, params=payload)
+        # logger.info(f"Headers: {headers}")
+        response = requests.get(api_url, headers=headers, params=payload, timeout=60.0)
         response.raise_for_status()
         
         formatted_devices = []
@@ -104,14 +109,29 @@ async def get_device_list():
                 room_info['buttons'].append(button_info)
             
             formatted_devices.append(room_info)
-            logger.info(f"Room info: {room_info}")
-            logger.info("-------------------------------------")
-        return json.dumps(formatted_devices, indent=4, ensure_ascii=False)
+            # logger.info(f"Room info: {room_info}")
+            # logger.info("-------------------------------------")
+        
+        # Format output based on is_format_toon parameter
+        if is_format_toon and TOON_AVAILABLE:
+            try:
+                # Convert to TOON format for compact representation
+                toon_output = encode(formatted_devices)
+                logger.info(f"Converted device list to TOON format ({len(toon_output)} chars)")
+                return toon_output
+            except Exception as e:
+                logger.warning(f"Failed to convert to TOON format: {e}. Falling back to JSON.")
+                return json.dumps(formatted_devices, indent=4, ensure_ascii=False)
+        else:
+            # Return as JSON string
+            if is_format_toon and not TOON_AVAILABLE:
+                logger.warning("TOON format requested but toon-format package not installed. Returning JSON.")
+            return json.dumps(formatted_devices, indent=4, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Lỗi khi lấy danh sách thiết bị: {str(e)} với env.OXII_API_KEY: {env.OXII_API_KEY}")
         raise
 
-async def get_device_info(deviceId: int):
+def get_device_info(deviceId: int):
     url = env.OXII_ROOT_API_URL + f"/api/app/oxii/device/{str(deviceId)}/properties"
     headers = {
         'accept': 'application/json',
@@ -120,7 +140,7 @@ async def get_device_info(deviceId: int):
         'X-Origin': 'smarthiz'
     }
     
-    response = await http_client.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=60.0)
     response.raise_for_status()
 
-    return response
+    return response.json()["data"]
