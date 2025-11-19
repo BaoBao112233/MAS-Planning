@@ -2,7 +2,7 @@
 
 ## Tổng quan
 
-Đây là UI demo đơn giản để test endpoint `/ai/chat/text` với tính năng Text-to-Speech sử dụng ElevenLabs API.
+Đây là UI demo đơn giản để test endpoint `/ai/chat/text` với tính năng Text-to-Speech sử dụng Google Cloud TTS API.
 
 ## Tính năng
 
@@ -152,7 +152,7 @@ static/
 ### **Audio không phát được**
 - Kiểm tra browser có hỗ trợ audio
 - Kiểm tra file audio URL có accessible
-- Kiểm tra ElevenLabs API
+- Kiểm tra Google Cloud TTS API credentials
 
 ### **UI không load**
 - Kiểm tra server đang chạy

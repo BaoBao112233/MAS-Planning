@@ -1,6 +1,6 @@
 """
 Tool Agent for MAS-Planning system using direct API calls
-No MCP dependency - calls api_things functions directly
+No external dependencies - calls api_things functions directly
 """
 import logging
 import asyncio
@@ -120,7 +120,7 @@ class AsyncGraphExecutor:
 #   Tool Agent Class
 # =======================
 class ToolAgent:
-    """Tool Agent using direct API calls to api_things functions (NO MCP)"""
+    """Tool Agent using direct API calls to api_things functions"""
 
     def __init__(self, model="gemini-2.5-flash", temperature=0.2, verbose=False, max_iterations=5, language_code="en-US"):
         self.name = "Tool Agent"
@@ -281,7 +281,7 @@ class ToolAgent:
         pass
 
     async def cleanup(self):
-        """Compatibility method - no cleanup needed without MCP"""
+        """Compatibility method - no cleanup needed"""
         pass
 
     # ==========================================================
@@ -494,7 +494,7 @@ class ToolAgent:
         return independent, dependent
 
     async def _execute_single_tool(self, tool_call: Dict) -> Dict:
-        """Execute a single tool call using direct API functions (NO MCP)"""
+        """Execute a single tool call using direct API functions"""
         try:
             tool_name = tool_call["name"]
             tool_args = tool_call.get("args", {})

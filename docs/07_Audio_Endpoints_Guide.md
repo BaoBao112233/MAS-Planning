@@ -60,19 +60,19 @@ Tải file audio đã được tạo.
 
 **Response:** File audio WAV
 
-## ElevenLabs Integration
+## Text-to-Speech Integration
 
-Hệ thống sử dụng ElevenLabs API để:
+Hệ thống sử dụng Google Cloud Text-to-Speech API để:
 
-- **Speech-to-Text**: Chuyển đổi file audio thành text
-- **Text-to-Speech**: Chuyển đổi response text thành file audio
+- **Speech-to-Text**: Chuyển đổi file audio thành text (Google Cloud Speech-to-Text)
+- **Text-to-Speech**: Chuyển đổi response text thành file audio (Google Cloud TTS)
 
 ### Cấu hình
 
-- **API Key**: `sk_6311380010ae14d3dc1c00641b0af94e4c55a81500e26dc1`
-- **Voice ID mặc định**: `21m00Tcm4TlvDq8ikWAM` (Rachel voice)
-- **Model TTS**: `eleven_monolingual_v1`
-- **Model STT**: `eleven_multilingual_sts_v2`
+- **Google Cloud API Key**: Configured in environment variables
+- **Voice Options**: Multiple language voices available via `/ai/voices` endpoint
+- **Default Voice**: `vi-VN-Neural2-A` (Vietnamese) or `en-US-Neural2-A` (English)
+- **Audio Format**: MP3 format for TTS output
 
 ## File Management
 
@@ -131,7 +131,7 @@ curl -X GET "http://localhost:8000/ai/download/audio/response_session123_2024102
 
 ### Lỗi thường gặp:
 
-1. **"Failed to generate speech"**: Kiểm tra ElevenLabs API key và quota
+1. **"Failed to generate speech"**: Kiểm tra Google Cloud API credentials và quota
 2. **"Could not transcribe audio"**: Đảm bảo file audio có định dạng đúng
 3. **"Audio file not found"**: File có thể đã bị xóa sau 1 giờ
 

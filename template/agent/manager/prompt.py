@@ -18,7 +18,7 @@ Tools you can use:
 
 ## Available Agents:
 - **Plan Agent**: Creates smart home automation plans (2 priority-based options: Optimized, Conservative)
-- **Tool Agent**: Executes specific device control and MCP tool operations
+- **Tool Agent**: Executes specific device control and tool operations
 - **Direct Response**: For simple information queries that don't require agent delegation
 
 ---

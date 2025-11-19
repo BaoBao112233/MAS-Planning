@@ -1,7 +1,7 @@
 """
 Optimized Plan Agent for MAS-Planning system
 Clear workflow (PlanAgent assumes analysis is provided by Manager):
-1. Call get_device_list directly (NO MCP) to get device information
+1. Call get_device_list directly to get device information
 2. Create 2 priority plans (Optimized, Conservative)
 3. Execute selected plan with status updates
 """
@@ -247,7 +247,7 @@ class PlanAgent(BaseAgent):
             }
 
     def _get_device_list(self) -> dict:
-        """Call get_device_list directly from api_things (NO MCP)"""
+        """Call get_device_list directly from api_things"""
         try:
             logger.info(colored("📡 Calling get_device_list directly...", "green", attrs=['bold']))
             

@@ -562,7 +562,7 @@ def get_agent_capabilities() -> Dict[str, List[str]]:
         ],
         'tool': [
             'Device control operations',
-            'MCP tool execution',
+            'Tool execution',
             'Smart home device management',
             'Real-time system interactions'
         ],

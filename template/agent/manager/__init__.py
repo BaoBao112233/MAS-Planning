@@ -1112,9 +1112,8 @@ How can I assist you today?"""
     
     def _get_device_list(self) -> Optional[Dict[str, Any]]:
         """
-        Call get_device_list directly from api_things (NO MCP)
-
-        Returns:
+        Call get_device_list directly from api_things
+                Returns:
             Device list data or None if failed
         """
         try:

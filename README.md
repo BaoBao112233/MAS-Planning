@@ -1,12 +1,12 @@
 # MAS-Planning — Multi-Agent Smart Home Planning
 
-Hệ thống MAS-Planning là một dự án multi-agent automation cho smart home sử dụng Model Context Protocol (MCP). Dự án tích hợp Google Cloud Vertex AI, LangGraph/StateGraph để điều phối luồng công việc giữa các agent: ManagerAgent, PlanAgent, và ToolAgent.
+Hệ thống MAS-Planning là một dự án multi-agent automation cho smart home. Dự án tích hợp Google Cloud Vertex AI, LangGraph/StateGraph để điều phối luồng công việc giữa các agent: ManagerAgent, PlanAgent, và ToolAgent.
 
 ## 🎯 Mục tiêu
 
 - **Sinh kế hoạch thông minh**: Tạo kế hoạch ưu tiên từ input (camera phát hiện người, sensor data)
 - **Điều phối thông minh**: ManagerAgent phân tích và điều hướng request đến agent phù hợp
-- **Thực thi tự động**: ToolAgent gọi MCP tools để điều khiển thiết bị (đèn, điều hòa, loa...)
+- **Thực thi tự động**: ToolAgent điều khiển thiết bị (đèn, điều hòa, loa...)
 - **Theo dõi trạng thái**: API integration để upload plans và track task status
 - **Workflow orchestration**: LangGraph StateGraph quản lý luồng giữa các agent
 
@@ -46,9 +46,6 @@ GOOGLE_CLOUD_PROJECT="your-project-id"
 GOOGLE_CLOUD_LOCATION="us-central1"
 MODEL_NAME="gemini-2.5-flash"
 
-# MCP Server
-MCP_SERVER_URL="http://localhost:9031"
-
 # API Integration (optional)
 API_BASE_URL="http://localhost:8080"
 ```
@@ -85,7 +82,7 @@ curl -X POST "http://localhost:9000/ai/chat" \
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │  ManagerAgent   │───▶│   PlanAgent     │───▶│   ToolAgent     │
 │                 │    │                 │    │                 │
-│ • Route queries │    │ • Plan creation │    │ • MCP tools     │
+│ • Route queries │    │ • Plan creation │    │ • API tools     │
 │ • Agent select  │    │ • Orchestration │    │ • Device control│
 │ • Context aware │    │ • API upload    │    │ • Execution     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
@@ -118,9 +115,8 @@ curl -X POST "http://localhost:9000/ai/chat" \
 │   │   │   ├── prompts.py     # Planning prompts
 │   │   │   ├── state.py       # State definitions
 │   │   │   └── utils.py       # Helper functions
-│   │   └── tool/              # ToolAgent - MCP tool execution
-│   │       ├── __init__.py    # ToolAgent class
-│   │       └── (MCP integration)
+│   │   └── tool/              # ToolAgent - API tool execution
+│   │       └── __init__.py    # ToolAgent class
 │   ├── configs/
 │   │   └── environments.py    # Environment configuration
 │   ├── router/
@@ -145,7 +141,7 @@ curl -X POST "http://localhost:9000/ai/chat" \
 5. **API Upload**: Plan được upload lên external API (nếu cấu hình)
 6. **Task Execution**:
    - PlanAgent điều phối thực thi plan
-   - ToolAgent thực thi từng task qua MCP tools
+   - ToolAgent thực thi từng task qua API calls
    - Cập nhật task status qua API
 7. **Completion**: Báo cáo kết quả và hoàn thành plan
 
@@ -153,7 +149,6 @@ curl -X POST "http://localhost:9000/ai/chat" \
 
 - **Python**: 3.8+
 - **Google Cloud**: Project với Vertex AI API enabled
-- **MCP Server**: Running trên URL được cấu hình
 - **Service Account**: Với quyền `roles/aiplatform.user` (nếu dùng GCP)
 
 ## 🧭 Configuration Reference
@@ -167,8 +162,7 @@ curl -X POST "http://localhost:9000/ai/chat" \
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID | "my-project-123" | Yes (if using Vertex AI) |
 | `GOOGLE_CLOUD_LOCATION` | GCP region | "us-central1" | Yes (if using Vertex AI) |
 | `MODEL_NAME` | LLM model | "gemini-2.5-flash" | Yes |
-| `MCP_SERVER_URL` | MCP server endpoint | `http://localhost:9031` | Yes |
-| `API_BASE_URL` | External API for plan upload | `http://localhost:8080` | No |
+| `PLAN_API_BASE_URL` | External API for plan upload | `http://localhost:8080` | No |
 
 ### Service Account Setup (GCP)
 
@@ -197,11 +191,11 @@ Key log patterns:
 
 ### Troubleshooting
 
-**❌ "No MCP tools available"**
+**❌ "API Connection Failed"**
 
-- Kiểm tra `MCP_SERVER_URL` trong environment
-- Đảm bảo MCP server đang chạy
-- Test connectivity: `curl http://localhost:9031/health`
+- Kiểm tra `OXII_ROOT_API_URL` và `PLAN_API_BASE_URL` trong environment
+- Đảm bảo API server đang chạy
+- Test connectivity: `curl http://your-api-url/health`
 
 **❌ "LLM not initialized"**
 
@@ -213,29 +207,6 @@ Key log patterns:
 
 - Do conflict giữa uvicorn và asyncio
 - Fix bằng cách dùng startup events thay vì `asyncio.run()`
-
-### Mock MCP Server
-
-Để test mà không cần MCP server thật:
-
-```python
-# Tạo file mock_mcp.py
-from fastapi import FastAPI
-import uvicorn
-
-app = FastAPI()
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.get("/sse")  
-def sse():
-    return {"url": "http://localhost:9031/messages/"}
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9031)
-```
 
 ## 🐳 Docker
 

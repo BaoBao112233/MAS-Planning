@@ -2,6 +2,21 @@
 
 Chào mừng bạn đến với bộ tài liệu toàn diện của hệ thống **MAS-Planning** (Multi-Agent Smart Home Planning) - một giải pháp automation thông minh cho smart home sử dụng công nghệ multi-agent và AI tiên tiến.
 
+## 🏗️ System Architecture Diagram
+
+**Current Architecture**: [MAS_Architecture.drawio](./MAS_Architecture.drawio)
+
+The comprehensive architecture diagram illustrates:
+- **Manager Agent**: Central orchestrator with LangGraph workflow
+- **Plan Agent**: Strategic planning with 2-plan system (Optimized/Conservative)
+- **Tool Agent**: Device execution with direct API integration
+- **Fast-Path Routing**: Skip LLM for simple queries (greetings)
+- **TOON Format**: 30-60% token reduction for device lists
+- **Multilingual Support**: Centralized translation layer
+- **Parallel Execution**: Concurrent task processing in Plan Agent
+
+---
+
 ## 📚 Mục lục Tài liệu
 
 ### [01. Kiến Trúc Tổng Quan](./01_Kiến_Trúc_Tổng_Quan.md)
@@ -27,15 +42,15 @@ Chào mừng bạn đến với bộ tài liệu toàn diện của hệ thống
 
 ### [04. Tool Agent](./05_Tool_Agent.md)
 - **Execution Engine**: Thực thi concrete device control actions
-- **MCP Integration**: Tích hợp với Model Context Protocol
+- **API Integration**: Tích hợp với OXII API và các dịch vụ bên ngoài
 - **Authentication Framework**: Quản lý token-based authentication
 - **Device Coordination**: Điều phối multi-device operations
 - **Error Recovery**: Xử lý lỗi và recovery mechanisms
 
-### [05. MCP Integration & External Services](./06_MCP_Integration_External_Services.md)
-- **Model Context Protocol**: Chi tiết về MCP integration
+### [05. External Services & Integration](./06_MCP_Integration_External_Services.md)
+- **OXII API**: Chi tiết về integration với OXII IoT platform
 - **Authentication & Security**: Bảo mật và xác thực
-- **External API Integration**: Tích hợp với OXII API, Google Cloud
+- **External API Integration**: Tích hợp với Plan API, Google Cloud
 - **Data Storage & Caching**: Redis và session management
 - **Health Check System**: Monitoring và health checking
 
@@ -46,6 +61,36 @@ Chào mừng bạn đến với bộ tài liệu toàn diện của hệ thống
 - **Deployment Guide**: Local, Docker, và production deployment
 - **Debugging & Troubleshooting**: Debug tools và common issues
 
+### [07. Audio Endpoints Guide](./07_Audio_Endpoints_Guide.md)
+- **Speech-to-Text Integration**: Google Cloud Speech API
+- **Text-to-Speech Capabilities**: Voice output for responses
+- **Audio Processing**: File format handling và optimization
+- **Streaming Support**: Real-time audio processing
+
+### [08. Fast-Path Classification System](./08_Fast_Path_System.md)
+- **Intent Classification**: Rule-based fast routing
+- **Performance Optimization**: Skip LLM for simple queries
+- **Query Patterns**: Greeting, device control, plan requests
+- **Direct Response**: Immediate handling without agent delegation
+
+### [09. TOON Format & Optimization](./09_TOON_Format_And_Optimization.md)
+- **TOON Format Integration**: Token-efficient serialization (30-60% reduction)
+- **Device List Optimization**: Compact data representation
+- **Performance Benchmarks**: Case studies and timing analysis
+- **LLM Context Management**: Efficient token usage strategies
+
+### [10. Migration History](./10_Migration_History.md)
+- **Version History**: System evolution and major changes
+- **Migration Guides**: Upgrade paths and breaking changes
+- **Deprecation Notices**: Legacy features and replacements
+- **Changelog**: Detailed version-by-version updates
+
+### [Multilingual Architecture](./MULTILINGUAL_ARCHITECTURE.md)
+- **Centralized Translation**: Manager Agent translation layer
+- **Language Code Flow**: vi-VN/en-US parameter propagation
+- **Translation Mappings**: Vietnamese ↔ English message pairs
+- **Design Principles**: Separation of concerns, clean architecture
+
 ## 🎯 Hệ thống MAS-Planning
 
 MAS-Planning là một hệ thống multi-agent automation tiên tiến cho smart home, được thiết kế để:
@@ -55,8 +100,7 @@ MAS-Planning là một hệ thống multi-agent automation tiên tiến cho smar
 - **🤖 Multi-Agent Architecture**: Coordination giữa các specialized agents
 - **🔧 Real-time Control**: Điều khiển thiết bị smart home real-time
 - **🧠 AI-Powered**: Sử dụng Google Vertex AI cho decision making
-- **🔌 MCP Integration**: Tích hợp với Model Context Protocol
-- **🔐 Enterprise Security**: Token-based authentication và secure communication
+- ** Enterprise Security**: Token-based authentication và secure communication
 
 ### **Kiến trúc Agents**
 
@@ -69,7 +113,7 @@ graph TB
     C --> F[Priority Planning]
     C --> G[Execution Orchestration]
     
-    E --> J[MCP Tools]
+    E --> J[API Integration]
     E --> K[Device Control]
     
     F --> L[Security Plan]
@@ -87,8 +131,8 @@ graph TB
 
 ### **Technology Stack**
 - **Backend**: Python 3.8+, FastAPI, LangGraph
-- **AI/ML**: Google Cloud Vertex AI, Gemini 2.5 Pro
-- **Integration**: Model Context Protocol (MCP)
+- **AI/ML**: Google Cloud Vertex AI, Gemini 2.5 Flash
+- **Integration**: OXII IoT API, Redis Cache
 - **Storage**: Redis for caching và session management
 - **Deployment**: Docker, Kubernetes support
 
@@ -137,7 +181,7 @@ Selected Plan → Plan Agent → Tool Agent Execution → Status Updates
 
 ### **3. Device Control**
 ```
-Control Command → Tool Agent → MCP Server → Device API → Action Result
+Control Command → Tool Agent → OXII API → Device API → Action Result
 ```
 
 ## 🔧 Cấu hình Environment
@@ -153,8 +197,9 @@ GOOGLE_CLOUD_PROJECT="your-project-id"
 GOOGLE_CLOUD_LOCATION="us-central1"
 MODEL_NAME="gemini-2.5-flash"
 
-# MCP Server
-MCP_SERVER_URL="http://localhost:9031"
+# OXII API
+OXII_ROOT_API_URL="your-oxii-api-url"
+OXII_API_KEY="your-api-key"
 
 # Redis
 REDIS_HOST="localhost"
@@ -163,7 +208,7 @@ REDIS_PORT=6379
 
 ## 🛡️ Security Features
 
-- **🔐 Token-based Authentication**: Secure MCP tool access
+- **🔐 Token-based Authentication**: Secure API access
 - **🛡️ Input Validation**: Comprehensive input sanitization
 - **🔒 Encrypted Communication**: Secure API communication
 - **📝 Audit Logging**: Complete operation tracking
@@ -175,24 +220,6 @@ REDIS_PORT=6379
 - **🏥 Health Checks**: System và service monitoring
 - **📈 Usage Analytics**: User behavior và interaction patterns
 - **🚨 Error Tracking**: Comprehensive error logging và alerting
-- **🔍 Langfuse Tracing**: LLM application monitoring và debugging với detailed traces, metrics, và error analysis
-
-### Langfuse Integration
-
-MAS-Planning tích hợp Langfuse để trace và monitor LLM applications:
-
-1. **Setup Langfuse Account**: Đăng ký tại [langfuse.com](https://langfuse.com)
-2. **Configure Environment Variables**:
-
-   ```bash
-   LANGFUSE_PUBLIC_KEY=your-public-key
-   LANGFUSE_SECRET_KEY=your-secret-key
-   LANGFUSE_HOST=https://cloud.langfuse.com
-   LANGFUSE_PROJECT_NAME=MAS-Planning
-   ```
-
-3. **View Traces**: Access Langfuse dashboard để xem detailed traces của agent interactions, errors, và performance metrics
-4. **Debug Issues**: Use trace data để identify bottlenecks và improve system reliability
 
 ## 🤝 Contributing
 

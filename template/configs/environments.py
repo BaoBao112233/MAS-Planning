@@ -48,18 +48,6 @@ class EnvironmentSettings(BaseSettings):
     PLAN_API_KEY: str
     OXII_ROOT_API_URL: str
     OXII_API_KEY: str
-    # ElevenLabs API settings
-    ELEVENLABS_BASE_URL: str
-    ELEVENLABS_API_KEY: str
-    ELEVENLABS_MODEL_ID: str
-    ELEVENLABS_VOICE_ID: str
-    ELEVENLABS_STABILITY: float = 0.5
-    ELEVENLABS_SIMILARITY_BOOST: float = 0.5
-    # Langfuse settings
-    LANGFUSE_PUBLIC_KEY: str
-    LANGFUSE_SECRET_KEY: str
-    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
-    LANGFUSE_PROJECT_NAME: str = "MAS-Planning"
     # Google API settings
     GOOGLE_API_KEY: str
     # Open WeatherMap API settings
@@ -72,7 +60,6 @@ class EnvironmentSettings(BaseSettings):
     AWS_S3_BUCKET: str
 
     # Debug settings
-    MCP_SERVER_URL: str
     MAX_ITERATIONS: int = 10
     LIMIT_MINUTES: int = 10
     MAX_MSG: int = 12

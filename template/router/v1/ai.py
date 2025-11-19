@@ -1,4 +1,3 @@
-import token
 from typing import Optional, Union
 import logging
 import json
@@ -14,7 +13,6 @@ import requests
 import httpx
 import aiofiles
 import traceback
-from langfuse import Langfuse
 from termcolor import colored
 
 from template.agent.manager import ManagerAgent
@@ -48,18 +46,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',  # format thời gian
 )
 logger = logging.getLogger(__name__)
-
-# Initialize Langfuse
-langfuse = Langfuse(
-    public_key=env.LANGFUSE_PUBLIC_KEY,
-    secret_key=env.LANGFUSE_SECRET_KEY,
-    host=env.LANGFUSE_HOST
-)
-
-# ElevenLabs configuration
-ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY
-ELEVENLABS_BASE_URL = env.ELEVENLABS_BASE_URL  
-DEFAULT_VOICE_ID = env.ELEVENLABS_VOICE_ID
 
 AiRouter = APIRouter(
     prefix="/ai", tags=["Chat AI"]
@@ -200,28 +186,6 @@ async def chat_text(request: ChatRequestAPI, background_tasks: BackgroundTasks):
     except Exception as e:
         error_msg = f"Error processing chat request: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        # Log to Langfuse
-        try:
-            span = langfuse.start_span(name="Chat Text API Error")
-            span.update(
-                input={
-                    "sessionId": request.sessionId,
-                    "conversationId": request.conversationId,
-                    "message": request.message[:100] + "..." if len(request.message) > 100 else request.message,
-                    "token": request.token[:10] + "..." if request.token else None
-                },
-                output={
-                    "error": str(e),
-                    "traceback": traceback.format_exc()
-                },
-                metadata={
-                    "endpoint": "/ai/chat/text",
-                    "error_type": type(e).__name__
-                }
-            )
-            span.end()
-        except Exception as trace_e:
-            logger.error(f"Failed to send trace to Langfuse: {trace_e}")
         return ChatResponse(
             sessionId=request.sessionId,
             response="Xin lỗi, đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại.",
@@ -349,9 +313,8 @@ async def get_token(
     user_password: str,
     user_country: str = "VI"
 ):
-
     """
-    Retrieve the MCP server token from environment variables
+    Retrieve the authentication token from OXII API
     """
 
     BASE_URL = env.OXII_ROOT_API_URL
